@@ -1,6 +1,9 @@
 #include <iostream>
 #include "mm_malloc.h"
 
+extern "C" void __parsec_roi_begin(){};
+extern "C" void __parsec_roi_end(){};
+
 int main(int argc, char *argv[])
 {
     int work_iteration = 10;
@@ -16,6 +19,7 @@ int main(int argc, char *argv[])
     const int last_i = full_size;
     const int part_last_i = part_size;
 
+    __parsec_roi_begin();
     for (int iteration = 0; iteration < 10000; iteration++) {
         i = 0;
         while (i < last_i) {
@@ -32,6 +36,7 @@ int main(int argc, char *argv[])
             i += 4 * stride;
         }
     }
+    __parsec_roi_end();
 
     _mm_free((void* )array);
 
