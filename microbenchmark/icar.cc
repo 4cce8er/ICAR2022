@@ -1,8 +1,13 @@
 #include <iostream>
 #include "mm_malloc.h"
 
+extern "C" void __parsec_roi_begin(){};
+extern "C" void __parsec_roi_end(){};
+
 int main(int argc, char *argv[])
 {
+    //ROI starts at the beginning of a program by default
+    __parsec_roi_end();
     int work_iteration = 10;
 
     const int full_size = 32 * 1024 * 1024; /* Full iteration is 32 MB */
@@ -16,7 +21,8 @@ int main(int argc, char *argv[])
     const int last_i = full_size;
     const int part_last_i = part_size;
 
-    for (int iteration = 0; iteration < 10000; iteration++) {
+    __parsec_roi_begin();
+    for (int iteration = 0; iteration < 1; iteration++) {
         i = 0;
         while (i < last_i) {
             /* Do the full iteration on odd number lines */
@@ -32,6 +38,7 @@ int main(int argc, char *argv[])
             i += 4 * stride;
         }
     }
+    __parsec_roi_end();
 
     _mm_free((void* )array);
 
