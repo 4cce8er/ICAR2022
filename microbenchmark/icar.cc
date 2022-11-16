@@ -6,6 +6,8 @@ extern "C" void __parsec_roi_end(){};
 
 int main(int argc, char *argv[])
 {
+    //ROI starts at the beginning of a program by default
+    __parsec_roi_end();
     int work_iteration = 10;
 
     const int full_size = 32 * 1024 * 1024; /* Full iteration is 32 MB */
@@ -20,7 +22,7 @@ int main(int argc, char *argv[])
     const int part_last_i = part_size;
 
     __parsec_roi_begin();
-    for (int iteration = 0; iteration < 10000; iteration++) {
+    for (int iteration = 0; iteration < 1; iteration++) {
         i = 0;
         while (i < last_i) {
             /* Do the full iteration on odd number lines */
