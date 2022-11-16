@@ -9,6 +9,7 @@ $module load gcc/10.1.0
 
 $make
 
-$PIN_ROOT/pin -t obj-intel64/memory_tracer.so -o "outputfile_baseName" -- ls -l
+$./run.sh exampleOutputBaseFileName
+
 
 ```

@@ -38,21 +38,18 @@ class thread_data_t {
   public:
     thread_data_t() {
         _count = 0;
-        _outFile = NULL;
         _outFileInsCount = NULL;
     }
     UINT64 _count;
     std::vector<address_trace> _traces;
-    ofstream *_outFile;
     ofstream *_outFileInsCount;
 };
 
 // key for accessing TLS storage in the threads. initialized once in main()
 static TLS_KEY tls_key = INVALID_TLS_KEY;
 
-
 VOID ThreadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v) {
-    printf("thread begin %d\n", threadid);
+    // printf("thread begin %d\n", threadid);
     numThreads++;
     thread_data_t *tdata = new thread_data_t;
     if (PIN_SetThreadData(tls_key, tdata, threadid) == FALSE) {
@@ -60,9 +57,7 @@ VOID ThreadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v) {
         PIN_ExitProcess(1);
     }
 
-    tdata->_outFile = new std::ofstream(outfile_basename + "_" + std::to_string(threadid) + ".txt");
     tdata->_outFileInsCount = new std::ofstream(outfile_basename + "_" + std::to_string(threadid) + "_instCount.txt");
-    
 }
 
 VOID PIN_FAST_ANALYSIS_CALL RecordMem(VOID *addr, bool type, THREADID threadid) {
@@ -117,19 +112,21 @@ VOID Instruction(INS ins, VOID *v) {
 
 // This function is called when the thread exits
 VOID ThreadFini(THREADID threadIndex, const CONTEXT *ctxt, INT32 code, VOID *v) {
-    printf("thread end %d code %d\n", threadIndex, code);
+    // printf("thread end %d code %d\n", threadIndex, code);
     thread_data_t *tdata = static_cast<thread_data_t *>(PIN_GetThreadData(tls_key, threadIndex));
+    
+    size_t binary_data_length = tdata->_traces.size() * sizeof(address_trace);
 
-    //TODO compression options?
+    char *bytes = new char[tdata->_traces.size() * sizeof(address_trace)];
+    char *begin = reinterpret_cast<char *>(&tdata->_traces[0]);
+    std::memcpy(bytes, begin, tdata->_traces.size() * sizeof(address_trace));
 
-    // *(tdata->_outFile) << "Total accesses : " << tdata->_traces.size() << endl;
+    size_t n = fwrite(bytes, 1, binary_data_length, stdout);
+    fflush(stdout);
 
-    // std::ostream_iterator<address_trace> output_iterator(*(tdata->_outFile), "\n");
-    // std::copy(tdata->_traces.begin(), tdata->_traces.end(), output_iterator);
+    assert(n == binary_data_length);
 
-    for (address_trace trace : tdata->_traces) {
-        *(tdata->_outFile) << trace << endl;
-    }
+    // std::cout << bytes;
 
     *(tdata->_outFileInsCount) << tdata->_traces.size() << endl;
 
@@ -138,13 +135,13 @@ VOID ThreadFini(THREADID threadIndex, const CONTEXT *ctxt, INT32 code, VOID *v) 
 
 // Set ROI flag
 VOID StartROI() {
-    std::cout << "Start ROI\n";
+    // std::cout << "Start ROI\n";
     isROI = true;
 }
 
 // Set ROI flag
 VOID StopROI() {
-    std::cout << "End ROI\n";
+    // std::cout << "End ROI\n";
     isROI = false;
 }
 
@@ -167,7 +164,9 @@ VOID Routine(RTN rtn, VOID *v) {
 }
 
 // This function is called when the application exits
-VOID Fini(INT32 code, VOID *v) { cout << "Total number of threads = " << numThreads << endl; }
+VOID Fini(INT32 code, VOID *v) {
+    // cout << "Total number of threads = " << numThreads << endl;
+}
 
 /* ===================================================================== */
 /* Print Help Message                                                    */
