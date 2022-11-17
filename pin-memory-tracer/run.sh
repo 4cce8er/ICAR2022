@@ -1,7 +1,8 @@
 #!/bin/bash -l
 
-echo "Output Baseline = $1"
+echo "Output File Basename = $1"
+echo "Application = $2"
 
-$PIN_ROOT/pin -t obj-intel64/memory_tracer.so -o $1 -- ../microbenchmark/a.out | gzip > $1_trace.gz
+$PIN_ROOT/pin -t obj-intel64/memory_tracer.so -o $1 -- $2 | gzip > $1_trace.gz
 
 

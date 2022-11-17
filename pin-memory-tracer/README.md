@@ -9,7 +9,7 @@ $module load gcc/10.1.0
 
 $make
 
-$./run.sh exampleOutputBaseFileName
+$./run.sh exampleOutputBaseFileName ../microbenchmark/a.out
 
 
 ```
