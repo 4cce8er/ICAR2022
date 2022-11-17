@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
     const int part_last_i = part_size;
 
     __parsec_roi_begin();
-    for (int iteration = 0; iteration < 1; iteration++) {
+    for (int iteration = 0; iteration < 10; iteration++) {
         i = 0;
         while (i < last_i) {
             /* Do the full iteration on odd number lines */
