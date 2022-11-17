@@ -6,14 +6,11 @@ else
     CXX_FLAGS += -std=c++11 -O2 -g -Wall
 endif
 
-KERNELS = gzipToTrace icar
+KERNELS = icar
 SUITE = $(KERNELS) #converter
 
 .PHONY: all
 all: $(SUITE)
-
-gzipToTrace : gzipToTrace.cc
-	$(CXX) $(CXX_FLAGS) -lboost_iostreams -lz  $< -o $@
 
 icar : icar.cc
 	$(CXX) $(CXX_FLAGS)  $< -o $@
