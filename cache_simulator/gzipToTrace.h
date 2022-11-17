@@ -18,7 +18,7 @@ addressTrace *convertGZip2MemoryTraces(char *fileName, int &traceSize) {
     int bufferSize = file1.tellg();
     file1.close();
 
-    // Read from the first command line argument, assume it's gzipped
+    // assume it's gzipped
     std::ifstream file(fileName, std::ios_base::in | std::ios_base::binary);
     boost::iostreams::filtering_streambuf<boost::iostreams::input> inbuf;
     inbuf.push(boost::iostreams::gzip_decompressor());
