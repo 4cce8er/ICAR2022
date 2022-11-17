@@ -40,9 +40,6 @@ class OurCacheSet {
     int getReplacementWay(); // LRU policy
 };
 
-/**
- * @} OurCacheSet
- */
 bool OurCacheSet::access(Addr tag, int timestamp) {
     for (int way = 0; way < assoc; ++way) {
         if (_lines[way].tag == tag && _lines[way].valid) {
@@ -79,6 +76,9 @@ int OurCacheSet::getReplacementWay() {
     }
     return minWay;
 }
+/**
+ * @} OurCacheSet
+ */
 
 /**
  * OurCache @{
@@ -121,10 +121,6 @@ class OurCache {
     int getSize() { return _size; }
 };
 
-/**
- * @} OurCache
- */
-
 void OurCache::access(Addr addr) {
     int setID = findSet(addr);
     Addr tag = getTag(addr);
@@ -136,13 +132,15 @@ void OurCache::access(Addr addr) {
     }
     _globalClock++;
 }
+/**
+ * @} OurCache
+ */
 
 int main(int argc, char *argv[]) {
     std::vector<OurCache> caches;
     const int kiloBytes = 1024;
     for (int i = 16; i <= 16 * 1024; i *= 2) {
-        OurCache sampleCache(i * kiloBytes);
-        caches.push_back(sampleCache);
+        caches.emplace_back(i * kiloBytes);
     }
 
     std::cout << argv[1] << std::endl;
@@ -153,16 +151,16 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < memoryTraceSize; i++) {
         // std::cout << "Trace[" << i << "] =" << memoryTraces[i] << std::endl;
 
-        for(int j = 0; j < caches.size(); j++){
-            caches[j].access(memoryTraces[i].address);
+        //for(int j = 0; j < caches.size(); j++){
+        //    caches[j].access(memoryTraces[i].address);
+        //}
+        for (auto &cache : caches) {
+            cache.access(memoryTraces[i].address);
         }
-        // for (auto cache : caches) {
-        //     cache.access(memoryTraces[i].address);
-        // }
     }
 
     std::cout << "Miss rates are:\n";
-    for (auto cache : caches) {
+    for (auto &cache : caches) {
         double missRate = (1.0 * cache.getNumMisses()) / cache.getTotalNumAccess();
         // TODO miss rate
         std::cout << "Cache with " << cache.getSize() << " bytes, missses = " << cache.getNumMisses()
