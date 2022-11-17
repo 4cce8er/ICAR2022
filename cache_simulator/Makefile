@@ -10,8 +10,8 @@ SUITE = $(KERNELS) #converter
 .PHONY: all
 all: $(SUITE)
 
-cacheSimulator : gzipToTrace.h our_utils.h cacheSimulator.cc
-	$(CXX) $(CXX_FLAGS) -lboost_iostreams -lz  $< -o $@
+cacheSimulator : cacheSimulator.cc gzipToTrace.h our_utils.h 
+	$(CXX) $(CXX_FLAGS) -lboost_iostreams -lz $< -o $@
 
 .PHONY: clean
 clean:

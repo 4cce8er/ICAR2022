@@ -23,12 +23,7 @@ class OurCache {
      * An address is devided like this:
      * (MSB) Tag|Index|SetSelect|WordSelect (LSB)
      * 
-     * These variables below are intended for calculating the set with bit
-     *  operation. I disabled them because we can use division and modular
-     *  now. Let us delete them after at least one Git push.
      */
-    //unsigned int _wordSelectBitLen;
-    //unsigned int _setSelectBitLen;
     /** Array of Cache Sets */
     OurCacheSet* _set;
     /** Utility functions */
@@ -46,17 +41,16 @@ public:
 };
 
 OurCache::OurCache() {
-    //_wordSelectBitLen = intLog2(_blkSize);
-    //_setSelectBitLen = intLog2(_assoc);
     _set = new OurCacheSet[_assoc];
 }
 
 bool OurCache::read(Addr addr) {
     // select sets, and call the read function of CacheSet and stuff
+    return true;
 }
 
 bool OurCache::write(Addr addr) {
-
+    return true;
 }
 
 int main(int argc, char *argv[])
