@@ -129,13 +129,11 @@ void OurCache::access(Addr addr) {
     int setID = findSet(addr);
     Addr tag = getTag(addr);
     bool hit = _sets[setID].access(tag, _globalClock);
-    std::cout << "access\n";
     if (hit) {
         _numHits += 1;
     } else {
         _numMisses += 1;
     }
-    std::cout << "access, _numHits =  " << _numHits << "\n";
     _globalClock++;
 }
 
@@ -154,9 +152,13 @@ int main(int argc, char *argv[]) {
 
     for (int i = 0; i < memoryTraceSize; i++) {
         // std::cout << "Trace[" << i << "] =" << memoryTraces[i] << std::endl;
-        for (auto cache : caches) {
-            cache.access(memoryTraces[i].address);
+
+        for(int j = 0; j < caches.size(); j++){
+            caches[j].access(memoryTraces[i].address);
         }
+        // for (auto cache : caches) {
+        //     cache.access(memoryTraces[i].address);
+        // }
     }
 
     std::cout << "Miss rates are:\n";
@@ -164,7 +166,7 @@ int main(int argc, char *argv[]) {
         double missRate = (1.0 * cache.getNumMisses()) / cache.getTotalNumAccess();
         // TODO miss rate
         std::cout << "Cache with " << cache.getSize() << " bytes, missses = " << cache.getNumMisses()
-                  << ", total access = " << cache.getTotalNumAccess() << "\n";
+                  << ", total access = " << cache.getTotalNumAccess() << ", miss rate = " << missRate << "\n";
     }
 
     return 0;
