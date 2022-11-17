@@ -5,7 +5,7 @@
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH -t 04:00:00
-#SBATCH -J icar_run_lbm
+#SBATCH -J icar_run_sphinx
 
 module load gcc/10.1.0
 
