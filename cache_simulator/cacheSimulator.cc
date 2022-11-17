@@ -1,7 +1,7 @@
 #include <iostream>
 
 #include "our_utils.h"
-
+#include "gzipToTrace.h"
 /** Not finished */
 
 typedef uint64_t Addr;

@@ -42,6 +42,7 @@ addressTrace *convertGZip2MemoryTraces(char *fileName, int &traceSize) {
     return traces;
 }
 
+/*
 int main(int argc, char *argv[]) {
     std::cout << argv[1] << std::endl;
 
@@ -52,3 +53,4 @@ int main(int argc, char *argv[]) {
         std::cout << "Trace[" << i << "] =" << memoryTraces[i] << std::endl;
     }
 }
+*/
