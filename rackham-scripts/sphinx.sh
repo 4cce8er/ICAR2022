@@ -1,13 +1,14 @@
 #!/bin/bash -l
 
-#SBATCH -A snic2022-22-557
+#SBATCH -A p2017001
 #SBATCH -p node
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH -t 04:00:00
+#SBATCH	-C mem256GB
 #SBATCH -J icar_run_sphinx
+#SBATCH --qos=p2017001_24nodes
 
-module load gcc/10.1.0
 
 echo "sphinx"
 

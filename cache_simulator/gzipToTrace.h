@@ -7,10 +7,9 @@
 class addressTrace {
   public:
     uint64_t address;
-    bool type;
 
     friend std::ostream &operator<<(std::ostream &outs, const addressTrace &trace) {
-        return outs << trace.type << "," << std::hex << trace.address << std::dec;
+        return outs << std::hex << trace.address << std::dec;
     }
 };
 

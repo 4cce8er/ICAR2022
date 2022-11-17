@@ -1,10 +1,11 @@
 #!/bin/bash -l
 
-#SBATCH -A snic2022-22-557
+#SBATCH -A p2017001
 #SBATCH -p core
 #SBATCH -n 1
 #SBATCH -t 01:00:00
 #SBATCH -J icar_run_microbenchmark
+#SBATCH --qos=p2017001_24nodes
 
 BINARY_ROOT=/home/alisemi/icar/ICAR2022/microbenchmark
 BINARY_NAME=icar
