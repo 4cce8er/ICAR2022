@@ -6,6 +6,7 @@
 /** Not finished */
 
 typedef uint64_t Addr;
+typedef uint64_t TimeStamp;
 
 const int assoc = 16;   // number of ways
 const int blkSize = 64; // bytes
@@ -21,7 +22,7 @@ struct OurCacheLine {
      * WordSelect is neglected since we look at data at cacheline level.
      */
     Addr tag;
-    int timestamp; // global clock tick
+    TimeStamp timestamp; // global clock tick
     bool valid = false;
 };
 
@@ -34,13 +35,13 @@ class OurCacheSet {
   public:
     OurCacheSet() { _lines = new OurCacheLine[assoc]; }
     ~OurCacheSet() { delete[] _lines; }
-    bool access(Addr tag, int timestamp);
+    bool access(Addr tag, TimeStamp timestamp);
 
   private:
     int getReplacementWay(); // LRU policy
 };
 
-bool OurCacheSet::access(Addr tag, int timestamp) {
+bool OurCacheSet::access(Addr tag, TimeStamp timestamp) {
     for (int way = 0; way < assoc; ++way) {
         if (_lines[way].tag == tag && _lines[way].valid) {
             // Update timestamp
@@ -88,10 +89,10 @@ class OurCache {
     int _size;
     int _numSets;
     OurCacheSet *_sets;
-    int _globalClock;
+    TimeStamp _globalClock;
 
-    int _numHits;
-    int _numMisses;
+    uint64_t _numHits;
+    uint64_t _numMisses;
 
     int findSet(Addr addr) {
         Addr maskedAddr = addr / blkSize;
@@ -114,9 +115,9 @@ class OurCache {
     /** Read and write operations of the cache. */
     void access(Addr addr);
 
-    int getNumMisses() { return _numMisses; }
-    int getNumHits() { return _numHits; }
-    int getTotalNumAccess() { return getNumMisses() + getNumHits(); }
+    uint64_t getNumMisses() { return _numMisses; }
+    uint64_t getNumHits() { return _numHits; }
+    uint64_t getTotalNumAccess() { return getNumMisses() + getNumHits(); }
 
     int getSize() { return _size; }
 };
@@ -151,9 +152,6 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < memoryTraceSize; i++) {
         // std::cout << "Trace[" << i << "] =" << memoryTraces[i] << std::endl;
 
-        //for(int j = 0; j < caches.size(); j++){
-        //    caches[j].access(memoryTraces[i].address);
-        //}
         for (auto &cache : caches) {
             cache.access(memoryTraces[i].address);
         }
