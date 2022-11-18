@@ -15,8 +15,8 @@ using std::string;
 
 KNOB<string> KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool", "o", "", "specify output file name");
 
-const uint64_t SKIP_INST_LIMIT = 1000000000;
-const uint64_t MEMORY_TRACE_LIMIT = 100000000;
+const uint64_t SKIP_INST_LIMIT = 100000000;
+const uint64_t MEMORY_TRACE_LIMIT = 500000000;
 
 INT32 numThreads = 0;
 uint64_t numInsns{0};

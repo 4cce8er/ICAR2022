@@ -9,9 +9,6 @@
 #SBATCH -J icar_run_lbm
 #SBATCH --qos=p2017001_24nodes
 
-
-module load gcc/10.1.0
-
 echo "lbm"
 
 BINARY_ROOT=/home/alisemi/icar/spec2006
@@ -22,6 +19,6 @@ PIN_ROOT=/home/alisemi/graph-frameworks/pin-3.24-98612-g6bd5931f2-gcc-linux/
 TRACER_ROOT=/home/alisemi/icar/ICAR2022/pin-memory-tracer
 
 cd ${BINARY_ROOT}
-$PIN_ROOT/pin -t $TRACER_ROOT/obj-intel64/memory_tracer.so -o ${OUTPUT_NAME} -- ./${BINARY_NAME} 3000 reference.dat 0 0 100_100_130_ldc.of 3>&1 1>&2 2>&3 | gzip > ${OUTPUT_NAME}_trace.gz
+$PIN_ROOT/pin -t $TRACER_ROOT/obj-intel64/memory_tracer.so -o ${OUTPUT_NAME} -- ./${BINARY_NAME} 100 reference.dat 0 0 100_100_130_ldc.of 3>&1 1>&2 2>&3 | gzip > ${OUTPUT_NAME}_trace.gz
 
 echo "finished!"
