@@ -1,8 +1,6 @@
 #include <iostream>
 #include "mm_malloc.h"
 
-const double kDamp = 0.85;
-
 /* dummy functions used by pin */
 void __attribute__((noinline)) __attribute__((optimize("O0"))) PIN_Start() {
     // assert(false); //on successful replacement - this shouldnt be executed
