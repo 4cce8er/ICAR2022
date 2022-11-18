@@ -15,7 +15,7 @@ BINARY_ROOT=/home/alisemi/icar/spec2006
 BINARY_NAME=lbm
 
 OUTPUT_NAME=${BINARY_NAME}_output
-PIN_ROOT=/home/alisemi/graph-frameworks/pin-3.24-98612-g6bd5931f2-gcc-linux/
+PIN_ROOT=/home/alisemi/icar/pin-3.25-98650-g8f6168173-gcc-linux/
 TRACER_ROOT=/home/alisemi/icar/ICAR2022/pin-memory-tracer
 
 cd ${BINARY_ROOT}

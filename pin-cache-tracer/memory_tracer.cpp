@@ -147,17 +147,15 @@ void OurCache::access(Addr addr) {
  * @} OurCache
  */
 
-
-
-
 // const uint64_t SKIP_INST_LIMIT = 100000000;
 const uint64_t SKIP_INST_LIMIT = 10000000;
-
-
+const uint64_t ACCESS_LIMIT = UINT64_MAX >> 32;
 
 bool isROI = true;
 
 uint64_t count = 0;
+uint64_t accessCount = 0;
+uint64_t roiInstCount = 0;
 
 std::vector<OurCache> caches;
 
@@ -172,10 +170,7 @@ void startROI() {
 void stopROI() {
     // std::cout << "End ROI\n";
     isROI = false;
-    count = 0;
 }
-
-
 
 void routineCallback(RTN rtn, void *v) {
     // std::string rtn_name = RTN_Name(rtn).c_str();
@@ -191,8 +186,14 @@ void routineCallback(RTN rtn, void *v) {
 }
 
 VOID PIN_FAST_ANALYSIS_CALL RecordMem(VOID *addr, bool type) {
-    for (auto &cache : caches) {
-        cache.access((UINT64)addr);
+    if (accessCount < ACCESS_LIMIT) {
+        for (auto &cache : caches) {
+            cache.access((UINT64)addr);
+        }
+        accessCount++;
+    } else if (accessCount == ACCESS_LIMIT) {
+        roiInstCount = count - SKIP_INST_LIMIT;
+        PIN_ExitApplication(0);
     }
 }
 
@@ -237,23 +238,23 @@ VOID Instruction(INS ins, VOID *v) {
     }
 }
 
-
-
-
-
-
 // This function is called when the application exits
 VOID Fini(INT32 code, VOID *v) {
-    std::cout << "Number of instructions = " << count << std::endl;
+    std::cout << "Total Number of instructions = " << count << std::endl;
+    if (roiInstCount == 0) {
+        roiInstCount = count - SKIP_INST_LIMIT;
+    }
+    std::cout << "Access limit is = " << ACCESS_LIMIT << std::endl;
+    std::cout << "Total accesses are = " << accessCount << std::endl;
+    std::cout << "ROI Instruction Count = " << roiInstCount << std::endl;
     std::cout << "Miss rates are:\n";
     for (auto &cache : caches) {
         double missRate = (1.0 * cache.getNumMisses()) / cache.getTotalNumAccess();
-        // TODO miss rate
         std::cout << "Cache with " << cache.getSize() << " bytes, missses = " << cache.getNumMisses()
-                  << ", total access = " << cache.getTotalNumAccess() << ", miss rate = " << missRate << "\n";
+                  << ", hits = " << cache.getNumHits() << " total accesses = " << cache.getTotalNumAccess()
+                  << ", miss rate = " << missRate << "\n";
     }
 }
-
 
 /* ===================================================================== */
 /* Print Help Message                                                    */

@@ -13,11 +13,11 @@ BINARY_NAME=icar
 echo "icar-microbenchmar"
 
 OUTPUT_NAME=${BINARY_NAME}_output
-PIN_ROOT=/home/alisemi/graph-frameworks/pin-3.24-98612-g6bd5931f2-gcc-linux/
-TRACER_ROOT=/home/alisemi/icar/ICAR2022/pin-memory-tracer
+PIN_ROOT=/home/alisemi/icar/pin-3.25-98650-g8f6168173-gcc-linux/
+TRACER_ROOT=/home/alisemi/icar/ICAR2022/pin-cache-tracer
 
 cd ${BINARY_ROOT}
-$PIN_ROOT/pin -t $TRACER_ROOT/obj-intel64/memory_tracer.so -o ${OUTPUT_NAME} -- ./${BINARY_NAME} 3>&1 1>&2 2>&3 | gzip > ${OUTPUT_NAME}_trace.gz
+$PIN_ROOT/pin -t $TRACER_ROOT/obj-intel64/memory_tracer.so -- ./${BINARY_NAME}
 
 echo "finished!"
 
