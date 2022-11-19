@@ -101,8 +101,8 @@ class OurCache {
     OurCacheSet *_sets;
     TimeStamp _globalClock;
 
-    uin64_t _numHits;
-    uin64_t _numMisses;
+    uint64_t _numHits;
+    uint64_t _numMisses;
 
     int findSet(Addr addr) {
         Addr maskedAddr = addr / blkSize;
