@@ -3,10 +3,15 @@
 #include <vector>
 
 #include "gzipToTrace.h"
-/** Not finished */
+#include "out_utils.h"
 
 typedef uint64_t Addr;
 typedef uint64_t TimeStamp;
+
+enum ReplPolicy {
+    LRU=0,
+    RANDOM;
+};
 
 const int assoc = 16;   // number of ways
 const int blkSize = 64; // bytes
@@ -35,13 +40,14 @@ class OurCacheSet {
   public:
     OurCacheSet() { _lines = new OurCacheLine[assoc]; }
     ~OurCacheSet() { delete[] _lines; }
-    bool access(Addr tag, TimeStamp timestamp);
+    bool access(Addr tag, TimeStamp timestamp, ReplPolicy rp=ReplPolicy::LRU);
 
   private:
-    int getReplacementWay(); // LRU policy
+    int getReplacementWay(ReplPolicy rp); 
 };
 
-bool OurCacheSet::access(Addr tag, TimeStamp timestamp) {
+bool OurCacheSet::access(Addr tag, TimeStamp timestamp, 
+            ReplPolicy rp=ReplPolicy::LRU) {
     for (int way = 0; way < assoc; ++way) {
         if (_lines[way].tag == tag && _lines[way].valid) {
             // Update timestamp
@@ -51,7 +57,7 @@ bool OurCacheSet::access(Addr tag, TimeStamp timestamp) {
     }
 
     // If we are here, then it is a miss
-    int way = getReplacementWay();
+    int way = getReplacementWay(rp);
     _lines[way].tag = tag;
     _lines[way].timestamp = timestamp;
     _lines[way].valid = true;
@@ -59,7 +65,7 @@ bool OurCacheSet::access(Addr tag, TimeStamp timestamp) {
     return false;
 }
 
-int OurCacheSet::getReplacementWay() {
+int OurCacheSet::getReplacementWay(ReplPolicy rp) {
     for (int way = 0; way < assoc; ++way) {
         if (!_lines[way].valid) {
             return way;
@@ -67,15 +73,23 @@ int OurCacheSet::getReplacementWay() {
     }
 
     // If we are here, then all ways are valid
-    int minTime = INT_MAX;
-    int minWay = 0;
-    for (int way = 0; way < assoc; ++way) {
-        if (_lines[way].timestamp < minTime) {
-            minWay = way;
-            minTime = _lines[way].timestamp;
+    switch (rp) {
+        case (ReplPolicy::LRU): {
+            TimeStamp minTime = UINT64_MAX;
+            int minWay = 0;
+            for (int way = 0; way < assoc; ++way) {
+                if (_lines[way].timestamp < minTime) {
+                    minWay = way;
+                    minTime = _lines[way].timestamp;
+                }
+            }
+            return minWay;
+        }
+        case (ReplPolicy::RANDOM) {
+            return randomIntGen::get(0, assoc);// a random number
+            break;
         }
     }
-    return minWay;
 }
 /**
  * @} OurCacheSet
@@ -90,6 +104,7 @@ class OurCache {
     int _numSets;
     OurCacheSet *_sets;
     TimeStamp _globalClock;
+    ReplPolicy _rp;
 
     uint64_t _numHits;
     uint64_t _numMisses;
@@ -108,7 +123,12 @@ class OurCache {
         _numMisses = 0;
         _globalClock = 0;
         _sets = new OurCacheSet[_numSets];
+        _rp = ReplPolicy::LRU;
         std::cout << "Cache size is " << size << " bytes\n";
+    }
+    OurCache(int size, ReplPolicy rp) {
+        OurCache(size);
+        _rp = rp;
     }
     ~OurCache() {}
 
