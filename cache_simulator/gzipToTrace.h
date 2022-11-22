@@ -13,32 +13,27 @@ class addressTrace {
     }
 };
 
-addressTrace *convertGZip2MemoryTraces(char *fileName, int &traceSize) {
-    std::ifstream file1(fileName, std::ios_base::ate | std::ios_base::binary);
-    int bufferSize = file1.tellg();
-    file1.close();
-
+void convertGZip2MemoryTraces(char *fileName, std::vector<addressTrace> &traces) {
     // assume it's gzipped
     std::ifstream file(fileName, std::ios_base::in | std::ios_base::binary);
     boost::iostreams::filtering_streambuf<boost::iostreams::input> inbuf;
     inbuf.push(boost::iostreams::gzip_decompressor());
     inbuf.push(file);
-    // Convert streambuf to istream
-    std::istream instream(&inbuf);
 
-    char *output = (char *)malloc(bufferSize);
-    instream.rdbuf()->sgetn(reinterpret_cast<char *>(output), bufferSize);
+    std::vector <char> vecArg;
+    vecArg.assign(std::istreambuf_iterator<char>{&inbuf}, {});
 
-    traceSize = bufferSize / sizeof(addressTrace);
-    addressTrace *traces = reinterpret_cast<addressTrace *>(output);
+    std::cout << "vecArg.size() = " << vecArg.size() << std::endl;
 
-    // Copy everything from instream to
-    //  buf.sgetn(reinterpret_cast<char *>(output), buf.size());
-    //  std::cout << instream.rdbuf();
+    addressTrace* ptrToByteVector =  reinterpret_cast<addressTrace *>(vecArg.data());
+
+    // There is no (convenient) way to just cast a vector of type A to vector of type B, we need to copy..
+    traces.assign(ptrToByteVector, ptrToByteVector + vecArg.size()/sizeof(addressTrace) );
+
+    std::cout << "traces.size() = " << traces.size() << std::endl;
+
     // Cleanup
     file.close();
-
-    return traces;
 }
 
 /*

@@ -146,8 +146,10 @@ int main(int argc, char *argv[]) {
 
     std::cout << argv[1] << std::endl;
 
-    int memoryTraceSize;
-    addressTrace *memoryTraces = convertGZip2MemoryTraces(argv[1], memoryTraceSize);
+    
+    std::vector<addressTrace> memoryTraces;
+    convertGZip2MemoryTraces(argv[1], memoryTraces);
+    int memoryTraceSize = memoryTraces.size();
 
     for (int i = 0; i < memoryTraceSize; i++) {
         // std::cout << "Trace[" << i << "] =" << memoryTraces[i] << std::endl;

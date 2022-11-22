@@ -15,14 +15,16 @@ using std::string;
 
 KNOB<string> KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool", "o", "", "specify output file name");
 
-const uint64_t SKIP_INST_LIMIT = 100000000;
-const uint64_t MEMORY_TRACE_LIMIT = 500000000;
-
-INT32 numThreads = 0;
-uint64_t numInsns{0};
-string outfile_basename;
+const uint64_t SKIP_INST_LIMIT = 10000000;
+const uint64_t ACCESS_LIMIT = UINT64_MAX >> 32;
 
 bool isROI = true;
+
+uint64_t count = 0;
+uint64_t accessCount = 0;
+uint64_t roiInstCount = 0;
+
+string outfile_basename;
 
 class address_trace {
   public:
@@ -33,14 +35,45 @@ class address_trace {
     }
 };
 
-UINT64 count = 0;
 std::vector<address_trace> traces;
 ofstream *outFileInsCount = NULL;
 
-VOID PIN_FAST_ANALYSIS_CALL RecordMem(VOID *addr, bool type) {
-    address_trace current_trace;
-    current_trace.address = (UINT64)addr;
-    traces.push_back(current_trace);
+// Set ROI flag
+void startROI() {
+    // std::cout << "Start ROI\n";
+    isROI = true;
+    count = SKIP_INST_LIMIT;
+}
+
+// Set ROI flag
+void stopROI() {
+    // std::cout << "End ROI\n";
+    isROI = false;
+}
+
+void routineCallback(RTN rtn, void *v) {
+    // std::string rtn_name = RTN_Name(rtn).c_str();
+    std::string rtn_name = RTN_Name(rtn);
+
+    if (rtn_name.find("PIN_Start") != std::string::npos) {
+        RTN_Replace(rtn, AFUNPTR(startROI));
+    }
+
+    if (rtn_name.find("PIN_Stop") != std::string::npos) {
+        RTN_Replace(rtn, AFUNPTR(stopROI));
+    }
+}
+
+VOID PIN_FAST_ANALYSIS_CALL RecordMem(VOID *addr, bool type) {  
+    if (accessCount < ACCESS_LIMIT) {
+        address_trace current_trace;
+        current_trace.address = (UINT64)addr;
+        traces.push_back(current_trace);
+        accessCount++;
+    } else if (accessCount == ACCESS_LIMIT) {
+        roiInstCount = count - SKIP_INST_LIMIT;
+        PIN_ExitApplication(0);
+    }
 }
 
 // This function is called before every instruction
@@ -54,7 +87,7 @@ VOID Instruction(INS ins, VOID *v) {
     }
 
     if (!INS_IsSyscall(ins)) {
-        if (count >= SKIP_INST_LIMIT && traces.size() < MEMORY_TRACE_LIMIT) {
+        if (count >= SKIP_INST_LIMIT) {
 
             // Instruments memory accesses using a predicated call, i.e.
             // the instrumentation is called iff the instruction will actually be executed.
@@ -84,36 +117,15 @@ VOID Instruction(INS ins, VOID *v) {
     }
 }
 
-// Set ROI flag
-VOID StartROI() {
-    // std::cout << "Start ROI\n";
-    isROI = true;
-    count = SKIP_INST_LIMIT;
-}
-
-// Set ROI flag
-VOID StopROI() {
-    // std::cout << "End ROI\n";
-    isROI = false;
-    count = 0;
-}
-
-// Pin calls this function every time a new rtn is executed
-VOID Routine(RTN rtn, VOID *v) {
-    // Get routine name
-    std::string rtn_name = RTN_Name(rtn);
-
-    if (rtn_name.find("__parsec_roi_begin") != std::string::npos) {
-        RTN_Replace(rtn, AFUNPTR(StartROI));
-    }
-
-    if (rtn_name.find("__parsec_roi_end") != std::string::npos) {
-        RTN_Replace(rtn, AFUNPTR(StopROI));
-    }
-}
-
 // This function is called when the application exits
 VOID Fini(INT32 code, VOID *v) {
+    std::cout << "Total Number of instructions = " << count << std::endl;
+    if (roiInstCount == 0) {
+        roiInstCount = count - SKIP_INST_LIMIT;
+    }
+    std::cout << "Access limit is = " << ACCESS_LIMIT << std::endl;
+    std::cout << "Total accesses are = " << accessCount << std::endl;
+    std::cout << "ROI Instruction Count = " << roiInstCount << std::endl;
     std::cout << "size of the trace is " << traces.size() << std::endl;
     size_t binary_data_length = traces.size() * sizeof(address_trace);
 
@@ -128,7 +140,7 @@ VOID Fini(INT32 code, VOID *v) {
 
     // std::cout << bytes;
 
-    *(outFileInsCount) << count << endl;
+    *(outFileInsCount) << roiInstCount << endl;
 }
 
 /* ===================================================================== */
@@ -156,13 +168,16 @@ int main(int argc, char *argv[]) {
 
     outFileInsCount = new std::ofstream(outfile_basename + "_instCount.txt");
 
+    isROI = true;
+    count = 0;
+
+    RTN_AddInstrumentFunction(routineCallback, 0);
+
     // Register Fini to be called when the application exits.
     PIN_AddFiniFunction(Fini, NULL);
 
     // Register Instruction to be called to instrument instructions.
     INS_AddInstrumentFunction(Instruction, NULL);
-
-    RTN_AddInstrumentFunction(Routine, 0);
 
     // Start the program, never returns
     PIN_StartProgram();
