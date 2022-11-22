@@ -10,7 +10,7 @@ typedef uint64_t TimeStamp;
 
 enum ReplPolicy {
     LRU=0,
-    RANDOM;
+    RANDOM
 };
 
 const int assoc = 16;   // number of ways
@@ -40,7 +40,7 @@ class OurCacheSet {
   public:
     OurCacheSet() { _lines = new OurCacheLine[assoc]; }
     ~OurCacheSet() { delete[] _lines; }
-    bool access(Addr tag, TimeStamp timestamp, ReplPolicy rp=ReplPolicy::LRU);
+    bool access(Addr tag, TimeStamp timestamp, ReplPolicy rp);
 
   private:
     int getReplacementWay(ReplPolicy rp); 
@@ -85,9 +85,11 @@ int OurCacheSet::getReplacementWay(ReplPolicy rp) {
             }
             return minWay;
         }
-        case (ReplPolicy::RANDOM) {
-            return randomIntGen::get(0, assoc);// a random number
-            break;
+        case (ReplPolicy::RANDOM): {
+            return getRandInt(0, assoc);// a random number
+        }
+        default: {
+            return -1;
         }
     }
 }
@@ -118,17 +120,13 @@ class OurCache {
     inline Addr getTag(Addr addr) { return addr / (blkSize * _numSets); }
 
   public:
-    OurCache(int size) : _size(size), _numSets(size / (assoc * blkSize)) {
+    OurCache(int size, ReplPolicy rp=ReplPolicy::LRU)
+        : _size(size), _numSets(size / (assoc * blkSize)), _rp(rp) {
         _numHits = 0;
         _numMisses = 0;
         _globalClock = 0;
         _sets = new OurCacheSet[_numSets];
-        _rp = ReplPolicy::LRU;
         std::cout << "Cache size is " << size << " bytes\n";
-    }
-    OurCache(int size, ReplPolicy rp) {
-        OurCache(size);
-        _rp = rp;
     }
     ~OurCache() {}
 
