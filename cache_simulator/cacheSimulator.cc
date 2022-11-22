@@ -169,9 +169,9 @@ int main(int argc, char *argv[]) {
     
     std::vector<addressTrace> memoryTraces;
     convertGZip2MemoryTraces(argv[1], memoryTraces);
-    int memoryTraceSize = memoryTraces.size();
+    uint64_t memoryTraceSize = memoryTraces.size();
 
-    for (int i = 0; i < memoryTraceSize; i++) {
+    for (uint64_t i = 0; i < memoryTraceSize; i++) {
         // std::cout << "Trace[" << i << "] =" << memoryTraces[i] << std::endl;
 
         for (auto &cache : caches) {
