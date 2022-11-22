@@ -5,9 +5,6 @@
 #include "gzipToTrace.h"
 #include "our_utils.h"
 
-typedef uint64_t Addr;
-typedef uint64_t TimeStamp;
-
 enum ReplPolicy {
     LRU=0,
     RANDOM
