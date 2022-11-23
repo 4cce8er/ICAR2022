@@ -7,18 +7,18 @@
 #include "gzipToTrace.h"
 #include "our_utils.h"
 
-typedef TraceNumber uint64_t;
+typedef uint64_t TraceNumber;
 
 const int blkSize = 64; // bytes
 
 class StatCache {
     /** The histogram we want from run time stats */
-    map<uint64_t ,uint64_t> reuseDistanceHisto; // <distance, count>
+    std::map<uint64_t ,uint64_t> reuseDistanceHisto; // <distance, count>
     /** Below are stats used in one round of analysis of trace 
      * @{
      */
-    map<Addr, TraceNumber> monitoredTrace;
-    map<Addr, bool> coldMissTrace;
+    std::map<Addr, TraceNumber> monitoredTrace;
+    std::map<Addr, bool> coldMissTrace;
     uint64_t coldMiss;
     /** 
      * @}
@@ -53,6 +53,10 @@ private:
     }
 
 public:
+    inline uint64_t getColdMiss() { return coldMiss; }
+    inline std::map<uint64_t ,uint64_t> getReuseDistanceHisto() {
+        return reuseDistanceHisto;
+    }
     /** To start over from a new analysis */
     void clear() {
         // Reset all stats
@@ -62,19 +66,21 @@ public:
         coldMiss = 0;
     }
     /** Run time stats on every trace */
-    void runTimeStatsFull(Addr* trace, uint64_t size);
+    void runTimeStatsFull(std::vector<addressTrace>& trace, 
+            TraceNumber start, TraceNumber len);
     /** The post-processing part in the paper. Returns R */
     double postProcessing(TraceNumber numInst, unsigned cacheLineSize); 
     void sampleTrace(std::vector<addressTrace>& trace, 
             std::vector<addressTrace>& sampled,
             uint64_t step, uint64_t maxDiff);
-}
+};
 
 void StatCache::runTimeStatsFull(std::vector<addressTrace>& trace, 
             TraceNumber start, TraceNumber len) {
-    const vector<TraceNumber> &mt = monitoredTrace; // An alias, but shorter
+    std::map<Addr, TraceNumber> &mt = monitoredTrace; // A shorter alias
     for (uint64_t i = start; i < start + len; ++i) {
-        Addr addr = trace[i];
+        // Align the addr
+        Addr addr = trace[i].address / 64; // block addr -> addr
         if (mt.count(addr)) {
             // Addr is being monitored
             uint64_t dist = i - mt[addr] - 1;
@@ -89,7 +95,7 @@ void StatCache::runTimeStatsFull(std::vector<addressTrace>& trace,
         } else {
             // Not monitored. Record cold start stats
             if (!coldMissTrace.count(addr)) {
-                coldMissTrace.emplace(addr, True);
+                coldMissTrace.emplace(addr, true);
                 coldMiss += 1;
             }
             // Add this addr to monitor
@@ -106,7 +112,7 @@ void StatCache::sampleTrace(std::vector<addressTrace>& trace,
     TraceNumber nextSampleTrace = 0;
 
     while (counter < trace.size()) {
-        sampled.emplace(trace[counter]);
+        sampled.push_back(trace[counter]);
         counter += randStep(step, maxDiff); // [step-maxDiff, step+maxDiff]
     }
 }
@@ -124,9 +130,7 @@ double StatCache::postProcessing(TraceNumber numInst, unsigned cacheLineNum) {
         }
         lastR = r;
     }
-    std::cout << "Cache with " << size << " bytes, misss rate = " 
-            << r << std::endl;
-    
+
     return r;
 }
 
@@ -144,10 +148,23 @@ int main(int argc, char *argv[])
     // sample trace
     std::vector<addressTrace> sampledTraces;
     statCache.clear();
-    statCache.sampleTrace(memoryTraces, sampledTraces);
+    uint64_t sampleStep = 1;
+    uint64_t sampleStepDiff = 0;
+    statCache.sampleTrace(memoryTraces, sampledTraces, 
+                sampleStep, sampleStepDiff);
 
     // Get run-time stats from sampled trace
     statCache.runTimeStatsFull(sampledTraces, 0, sampledTraces.size());
+    int counter = 0;
+    for (const auto &each : statCache.getReuseDistanceHisto()) {
+        if (counter > 100) {
+            break;
+        }
+        std::cout << each.first << " " << each.second << std::endl;
+        counter++;
+    }
+    std::cout << "Sample size is " << memoryTraces.size() << std::endl;
+    std::cout << "Cold misses is " << statCache.getColdMiss() << std::endl;
 
     // Post-process trace for all cache sizes from 16KB to 16MB
     const int kiloBytes = 1024;
@@ -158,7 +175,8 @@ int main(int argc, char *argv[])
         unsigned cacheLineNum = size / blkSize;
         double r = 0;
         r = statCache.postProcessing(
-                    sampledTraces.size() - statCache.coldMiss, cacheLineNum);
+                    sampledTraces.size() - statCache.getColdMiss(), 
+                    cacheLineNum);
         std::cout << "Cache with " << size << " bytes, missses = " 
                     << r << std::endl;
     }
