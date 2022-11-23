@@ -10,7 +10,7 @@ enum ReplPolicy {
     RANDOM
 };
 
-const int assoc = 16;   // number of ways
+const int assoc = 16; //262144;   // number of ways
 const int blkSize = 64; // bytes
 
 struct OurCacheLine {
@@ -83,7 +83,7 @@ int OurCacheSet::getReplacementWay(ReplPolicy rp) {
             return minWay;
         }
         case (ReplPolicy::RANDOM): {
-            return getRandInt(0, assoc);// a random number
+            return getRandInt(0, assoc - 1);// a random number
         }
         default: {
             return -1;
@@ -140,7 +140,7 @@ class OurCache {
 void OurCache::access(Addr addr) {
     int setID = findSet(addr);
     Addr tag = getTag(addr);
-    bool hit = _sets[setID].access(tag, _globalClock);
+    bool hit = _sets[setID].access(tag, _globalClock, _rp);
     if (hit) {
         _numHits += 1;
     } else {
@@ -156,7 +156,7 @@ int main(int argc, char *argv[]) {
     std::vector<OurCache> caches;
     const int kiloBytes = 1024;
     for (int i = 16; i <= 16 * 1024; i *= 2) {
-        caches.emplace_back(i * kiloBytes);
+        caches.emplace_back(i * kiloBytes, ReplPolicy::RANDOM);
     }
 
     std::cout << argv[1] << std::endl;
