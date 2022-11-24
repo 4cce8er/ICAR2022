@@ -42,17 +42,22 @@ private:
         return 1 - pow(1 - (1 / L), n);
     }
 
-    inline double solve(double r, TraceNumber numInst, unsigned cacheLineNum,
-            int i) {
+    inline double solve(double r, unsigned cacheLineNum, int i) {
         assert(i < _chunkCount);
-        // Optional: count cold misses
-        double sum = 0;
+        /** 
+         * IMPORTANT:
+         * We tried to subtract cold misses from numInst, as a way of ignoring
+         *  the cold misses as is described in the paper.
+         * It turned out the correct way is to add cold misses to num. This 
+         *  gave us a better result.
+         */
+        double sum = _coldMiss[i];
         for (auto const &distAndCount : _reuseDistanceHisto[i]) {
             uint64_t dist = distAndCount.first;
             // sum += h(K)f(KR)
             sum += distAndCount.second * f((double)cacheLineNum, dist * r);
         }
-        return sum / numInst;
+        return sum / _numInst[i];
     }
 
 public:
@@ -167,7 +172,7 @@ void StatCache::postProcessing(unsigned cacheLineNum) {
         const double eps = 0.0001;
         
         while (true) {
-            r = solve(r, _numInst[i] - _coldMiss[i], cacheLineNum, i);
+            r = solve(r, cacheLineNum, i);
             if (fabs(r - lastR) < eps) {
                 break;
             }
@@ -183,9 +188,14 @@ int main(int argc, char *argv[])
     // arg: file name
     std::cout << "Arg filename: " << argv[1] << std::endl;
     bool doSample = false; 
+    unsigned useTimeSlot = 0;
     if (argc > 2) {
         doSample = atoi(argv[2]);
         std::cout << "Arg sample: " << doSample << std::endl;
+    }
+    if (argc > 3) {
+        useTimeSlot = atoi(argv[3]);
+        std::cout << "Arg useTimeSlot: " << useTimeSlot << std::endl;
     }
     
     std::vector<addressTrace> memoryTraces;
@@ -210,7 +220,10 @@ int main(int argc, char *argv[])
     std::cout << "Sample size is " << sampledSize << std::endl;
     
     /** Process traces in time slots */
-    const unsigned timeSlotLen = 10488026;
+    unsigned timeSlotLen = sampledSize;
+    if (useTimeSlot > 0) {
+        timeSlotLen = useTimeSlot;
+    }
     std::vector<unsigned> timeSlotStart;
     // just remember the starting index of each timeslot
     unsigned nextSlotStart = 0;
@@ -232,7 +245,10 @@ int main(int argc, char *argv[])
         unsigned from = timeSlotStart[i];
         unsigned to = timeSlotStart[i + 1];
         statCache.runTimeStatsFull(sampledTraces, from, to - from);
+        std::cout << "Chunk " << i <<" size " 
+                << to - from << std::endl;
     }
+    std::cout << "Chunk count: " << statCache.getChunkCount() << std::endl;
     std::cout << "Cold misses is " << statCache.getTotalColdMiss() << std::endl;
 
     /** Post-process trace for all cache sizes from 16KB to 16MB */
@@ -249,6 +265,10 @@ int main(int argc, char *argv[])
         r /= statCache.getChunkCount();
         std::cout << "Cache with " << size << " bytes, missses = " 
                 << r << std::endl;
+        //for (int i = 0; i < statCache.getChunkCount(); ++i) {
+        //    std::cout << "\tChunk " << i <<" miss rate " 
+        //            << statCache.getMissRatio(i) << std::endl;
+        //}
     }
 
     return 0;

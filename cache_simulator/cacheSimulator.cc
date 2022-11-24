@@ -10,7 +10,7 @@ enum ReplPolicy {
     RANDOM
 };
 
-const int assoc = 16; //262144;   // number of ways
+const int defaultAssoc = 16; //262144;   // number of ways
 const int blkSize = 64; // bytes
 
 struct OurCacheLine {
@@ -32,10 +32,16 @@ struct OurCacheLine {
  * OurCacheSet @{
  */
 class OurCacheSet {
+    int _assoc;
     OurCacheLine *_lines;
 
   public:
-    OurCacheSet() { _lines = new OurCacheLine[assoc]; }
+    OurCacheSet() : _assoc(defaultAssoc) { 
+        _lines = new OurCacheLine[_assoc]; 
+    }
+    OurCacheSet(int assoc) : _assoc(assoc) { 
+        _lines = new OurCacheLine[_assoc]; 
+    }
     ~OurCacheSet() { delete[] _lines; }
     bool access(Addr tag, TimeStamp timestamp, ReplPolicy rp);
 
@@ -45,7 +51,7 @@ class OurCacheSet {
 
 bool OurCacheSet::access(Addr tag, TimeStamp timestamp, 
             ReplPolicy rp=ReplPolicy::LRU) {
-    for (int way = 0; way < assoc; ++way) {
+    for (int way = 0; way < _assoc; ++way) {
         if (_lines[way].tag == tag && _lines[way].valid) {
             // Update timestamp
             _lines[way].timestamp = timestamp;
@@ -63,7 +69,7 @@ bool OurCacheSet::access(Addr tag, TimeStamp timestamp,
 }
 
 int OurCacheSet::getReplacementWay(ReplPolicy rp) {
-    for (int way = 0; way < assoc; ++way) {
+    for (int way = 0; way < _assoc; ++way) {
         if (!_lines[way].valid) {
             return way;
         }
@@ -74,7 +80,7 @@ int OurCacheSet::getReplacementWay(ReplPolicy rp) {
         case (ReplPolicy::LRU): {
             TimeStamp minTime = UINT64_MAX;
             int minWay = 0;
-            for (int way = 0; way < assoc; ++way) {
+            for (int way = 0; way < _assoc; ++way) {
                 if (_lines[way].timestamp < minTime) {
                     minWay = way;
                     minTime = _lines[way].timestamp;
@@ -83,7 +89,7 @@ int OurCacheSet::getReplacementWay(ReplPolicy rp) {
             return minWay;
         }
         case (ReplPolicy::RANDOM): {
-            return getRandInt(0, assoc - 1);// a random number
+            return getRandInt(0, _assoc - 1);// a random number
         }
         default: {
             return -1;
@@ -117,12 +123,19 @@ class OurCache {
     inline Addr getTag(Addr addr) { return addr / (blkSize * _numSets); }
 
   public:
-    OurCache(int size, ReplPolicy rp=ReplPolicy::LRU)
-        : _size(size), _numSets(size / (assoc * blkSize)), _rp(rp) {
+    OurCache(int size, ReplPolicy rp=ReplPolicy::LRU, bool fullyAssoc=false)
+        : _size(size),  _rp(rp) {
         _numHits = 0;
         _numMisses = 0;
         _globalClock = 0;
-        _sets = new OurCacheSet[_numSets];
+        if (fullyAssoc) {
+            _numSets = 1;
+            _sets = new OurCacheSet(size / blkSize);
+            std::cout << "Fully assoc cache\n";
+        } else {
+            _numSets = size / (defaultAssoc * blkSize);
+            _sets = new OurCacheSet[_numSets];
+        }
         std::cout << "Cache size is " << size << " bytes\n";
     }
     ~OurCache() {}
@@ -153,15 +166,25 @@ void OurCache::access(Addr addr) {
  */
 
 int main(int argc, char *argv[]) {
+    // first arg is file name
+    std::cout << "Arg filename: " << argv[1] << std::endl;
+    bool fullyAssocAndRandom;
+    ReplPolicy replPolicy = ReplPolicy::LRU;
+    if (argc > 2) {
+        fullyAssocAndRandom = atoi(argv[2]);
+        if (fullyAssocAndRandom) {
+            replPolicy = ReplPolicy::RANDOM;
+        }
+        std::cout << "Arg fullyAssocAndRandom: " 
+                    << fullyAssocAndRandom << std::endl;
+    }
+
     std::vector<OurCache> caches;
     const int kiloBytes = 1024;
     for (int i = 16; i <= 16 * 1024; i *= 2) {
-        caches.emplace_back(i * kiloBytes, ReplPolicy::RANDOM);
+        caches.emplace_back(i * kiloBytes, replPolicy, fullyAssocAndRandom);
     }
 
-    std::cout << argv[1] << std::endl;
-
-    
     std::vector<addressTrace> memoryTraces;
     convertGZip2MemoryTraces(argv[1], memoryTraces);
     uint64_t memoryTraceSize = memoryTraces.size();
