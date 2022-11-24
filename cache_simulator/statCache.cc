@@ -12,17 +12,18 @@ typedef uint64_t TraceNumber;
 const int blkSize = 64; // bytes
 
 class StatCache {
-    /** The histogram we want from run time stats */
-    std::map<uint64_t ,uint64_t> reuseDistanceHisto; // <distance, count>
-    /** Below are stats used in one round of analysis of trace 
-     * @{
-     */
-    std::map<Addr, TraceNumber> monitoredTrace;
-    std::map<Addr, bool> coldMissTrace;
-    uint64_t coldMiss;
-    /** 
-     * @}
-     */
+    typedef std::map<uint64_t ,uint64_t> ReuseDistHisto;
+    typedef std::map<Addr, TraceNumber> MonitoredTrace;
+    typedef std::map<Addr, bool> ColdMissTrace;
+    /** Each time runTimeStats is called, append to the vectors */
+    std::vector<ReuseDistHisto> _reuseDistanceHisto; // <dist, n>
+    std::vector<MonitoredTrace> _monitoredTrace;
+    std::vector<ColdMissTrace> _coldMissTrace;
+    std::vector<uint64_t> _coldMiss;
+    std::vector<TraceNumber> _numInst;
+    /** Counts how many times runTimeStats is called */
+    unsigned _chunkCount = 0;
+    std::vector<double> _missRatio;
 
 private:
     /** 
@@ -41,10 +42,12 @@ private:
         return 1 - pow(1 - (1 / L), n);
     }
 
-    inline double solve(double r, TraceNumber numInst, unsigned cacheLineNum) {
+    inline double solve(double r, TraceNumber numInst, unsigned cacheLineNum,
+            int i) {
+        assert(i < _chunkCount);
         // Optional: count cold misses
         double sum = 0;
-        for (auto const &distAndCount : reuseDistanceHisto) {
+        for (auto const &distAndCount : _reuseDistanceHisto[i]) {
             uint64_t dist = distAndCount.first;
             // sum += h(K)f(KR)
             sum += distAndCount.second * f((double)cacheLineNum, dist * r);
@@ -53,23 +56,49 @@ private:
     }
 
 public:
-    inline uint64_t getColdMiss() { return coldMiss; }
-    inline std::map<uint64_t ,uint64_t> getReuseDistanceHisto() {
-        return reuseDistanceHisto;
+    inline uint64_t getColdMiss(int i) { 
+        assert(i < _chunkCount);
+        return _coldMiss[i];
     }
+
+    inline uint64_t getTotalColdMiss() { 
+        uint64_t sum = 0;
+        for (uint64_t m : _coldMiss) {
+            sum += m;
+        }
+        return sum;
+    }
+
+    inline unsigned getChunkCount() { return _chunkCount; }
+
+    inline double getMissRatio(int i) {
+        assert(i < _chunkCount);
+        return _missRatio[i];
+    }
+
+    inline double getTotalMissRatio() {
+        double sum = 0;
+        for (double r : _missRatio) {
+            sum += r;
+        }
+        return sum;
+    }
+
     /** To start over from a new analysis */
-    void clear() {
+    void clearStats() {
         // Reset all stats
-        reuseDistanceHisto.clear();
-        monitoredTrace.clear();
-        coldMissTrace.clear();
-        coldMiss = 0;
+        _reuseDistanceHisto.clear();
+        _monitoredTrace.clear();
+        _coldMissTrace.clear();
+        _coldMiss.clear();
+        _missRatio.clear();
+        _chunkCount = 0;
     }
     /** Run time stats on every trace */
     void runTimeStatsFull(std::vector<addressTrace>& trace, 
             TraceNumber start, TraceNumber len);
     /** The post-processing part in the paper. Returns R */
-    double postProcessing(TraceNumber numInst, unsigned cacheLineSize); 
+    void postProcessing(unsigned cacheLineNum); 
     void sampleTrace(std::vector<addressTrace>& trace, 
             std::vector<addressTrace>& sampled,
             uint64_t step, uint64_t maxDiff);
@@ -77,7 +106,16 @@ public:
 
 void StatCache::runTimeStatsFull(std::vector<addressTrace>& trace, 
             TraceNumber start, TraceNumber len) {
-    std::map<Addr, TraceNumber> &mt = monitoredTrace; // A shorter alias
+    _reuseDistanceHisto.push_back(ReuseDistHisto());
+    _monitoredTrace.push_back(MonitoredTrace());
+    _coldMissTrace.push_back(ColdMissTrace());
+    _coldMiss.push_back(0);
+    _numInst.push_back(len);
+
+    /** Make shorter aliases */
+    ReuseDistHisto &hist = _reuseDistanceHisto[_chunkCount];
+    MonitoredTrace &mt = _monitoredTrace[_chunkCount];
+    ColdMissTrace &miss = _coldMissTrace[_chunkCount];
     for (uint64_t i = start; i < start + len; ++i) {
         // Align the addr
         Addr addr = trace[i].address / 64; // block addr -> addr
@@ -85,23 +123,25 @@ void StatCache::runTimeStatsFull(std::vector<addressTrace>& trace,
             // Addr is being monitored
             uint64_t dist = i - mt[addr] - 1;
             // Add to histo
-            if (reuseDistanceHisto.count(dist)) {
-                reuseDistanceHisto[dist] += 1;
+            if (hist.count(dist)) {
+                hist[dist] += 1;
             } else {
-                reuseDistanceHisto.emplace(dist, 1);
+                hist.emplace(dist, 1);
             }
             // Add this addr to monitor
             mt[addr] = i;
         } else {
             // Not monitored. Record cold start stats
-            if (!coldMissTrace.count(addr)) {
-                coldMissTrace.emplace(addr, true);
-                coldMiss += 1;
+            if (!miss.count(addr)) {
+                miss.emplace(addr, true);
+                _coldMiss[_chunkCount] += 1;
             }
             // Add this addr to monitor
             mt.emplace(addr, i);
         }
     }
+    
+    _chunkCount += 1;
 }
 
 void StatCache::sampleTrace(std::vector<addressTrace>& trace, 
@@ -117,68 +157,98 @@ void StatCache::sampleTrace(std::vector<addressTrace>& trace,
     }
 }
 
-double StatCache::postProcessing(TraceNumber numInst, unsigned cacheLineNum) {
-    // Iterate cache size from 16KB to 16MB
-    double r = 0.5;
-    double lastR = r;
-    const double eps = 0.0001;
-    
-    while (true) {
-        r = solve(r, numInst, cacheLineNum);
-        if (fabs(r - lastR) < eps) {
-            break;
-        }
-        lastR = r;
-    }
+void StatCache::postProcessing(unsigned cacheLineNum) {
+    _missRatio.clear();
+    for (int i = 0; i < _chunkCount; ++i) {
+        _missRatio.push_back(0);
 
-    return r;
+        double r = 0.5;
+        double lastR = r;
+        const double eps = 0.0001;
+        
+        while (true) {
+            r = solve(r, _numInst[i] - _coldMiss[i], cacheLineNum, i);
+            if (fabs(r - lastR) < eps) {
+                break;
+            }
+            lastR = r;
+        }
+
+        _missRatio[i] = r;
+    }
 }
 
 int main(int argc, char *argv[]) 
 {
     // arg: file name
-    std::cout << argv[1] << std::endl;
+    std::cout << "Arg filename: " << argv[1] << std::endl;
+    bool doSample = false; 
+    if (argc > 2) {
+        doSample = atoi(argv[2]);
+        std::cout << "Arg sample: " << doSample << std::endl;
+    }
     
     std::vector<addressTrace> memoryTraces;
     convertGZip2MemoryTraces(argv[1], memoryTraces);
     uint64_t memoryTraceSize = memoryTraces.size();
-    
+
     StatCache statCache;
 
-    // sample trace
-    std::vector<addressTrace> sampledTraces;
-    statCache.clear();
-    uint64_t sampleStep = 1;
-    uint64_t sampleStepDiff = 0;
-    statCache.sampleTrace(memoryTraces, sampledTraces, 
-                sampleStep, sampleStepDiff);
-
-    // Get run-time stats from sampled trace
-    statCache.runTimeStatsFull(sampledTraces, 0, sampledTraces.size());
-    int counter = 0;
-    for (const auto &each : statCache.getReuseDistanceHisto()) {
-        if (counter > 100) {
+    /** Sample the trace */
+    std::vector<addressTrace>& sampledTraces = memoryTraces;
+    std::vector<addressTrace> sampleContainer;
+    if (doSample) {
+        uint64_t sampleStep = 100;
+        uint64_t sampleStepDiff = 80;
+        statCache.sampleTrace(memoryTraces, sampleContainer, 
+                    sampleStep, sampleStepDiff);
+        // release memory by swapping with an empty vector
+        std::vector<addressTrace>().swap(memoryTraces);
+        sampledTraces = sampleContainer;
+    }
+    TraceNumber sampledSize = sampledTraces.size();
+    std::cout << "Sample size is " << sampledSize << std::endl;
+    
+    /** Process traces in time slots */
+    const unsigned timeSlotLen = 10488026;
+    std::vector<unsigned> timeSlotStart;
+    // just remember the starting index of each timeslot
+    unsigned nextSlotStart = 0;
+    while (true) {
+        timeSlotStart.push_back(nextSlotStart);
+        nextSlotStart += timeSlotLen;
+        // last slot cannot be too small
+        if (nextSlotStart >= sampledSize
+                || sampledSize - nextSlotStart < timeSlotLen / 2) {
+            // push one sampledSize at the end
+            timeSlotStart.push_back(sampledSize);
             break;
         }
-        std::cout << each.first << " " << each.second << std::endl;
-        counter++;
     }
-    std::cout << "Sample size is " << memoryTraces.size() << std::endl;
-    std::cout << "Cold misses is " << statCache.getColdMiss() << std::endl;
 
-    // Post-process trace for all cache sizes from 16KB to 16MB
+    /** Get run-time stats from sampled trace */
+    statCache.clearStats();
+    for (int i = 0; i < timeSlotStart.size() - 1; ++i) {
+        unsigned from = timeSlotStart[i];
+        unsigned to = timeSlotStart[i + 1];
+        statCache.runTimeStatsFull(sampledTraces, from, to - from);
+    }
+    std::cout << "Cold misses is " << statCache.getTotalColdMiss() << std::endl;
+
+    /** Post-process trace for all cache sizes from 16KB to 16MB */
     const int kiloBytes = 1024;
     unsigned startSize = 16 * kiloBytes;
     unsigned endSize = 16 * 1024 * kiloBytes;
     std::cout << "Miss rates are:\n";
     for (unsigned size = startSize; size <= endSize; size *= 2) {
         unsigned cacheLineNum = size / blkSize;
-        double r = 0;
-        r = statCache.postProcessing(
-                    sampledTraces.size() - statCache.getColdMiss(), 
-                    cacheLineNum);
+        
+        statCache.postProcessing(cacheLineNum);
+
+        double r = statCache.getTotalMissRatio();
+        r /= statCache.getChunkCount();
         std::cout << "Cache with " << size << " bytes, missses = " 
-                    << r << std::endl;
+                << r << std::endl;
     }
 
     return 0;
