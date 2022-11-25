@@ -51,13 +51,15 @@ private:
          * It turned out the correct way is to add cold misses to num. This 
          *  gave us a better result.
          */
-        double sum = _coldMiss[i];
+       // double sum = _coldMiss[i];
+        double sum = 0;
         for (auto const &distAndCount : _reuseDistanceHisto[i]) {
             uint64_t dist = distAndCount.first;
             // sum += h(K)f(KR)
             sum += distAndCount.second * f((double)cacheLineNum, dist * r);
         }
-        return sum / _numInst[i];
+        return sum / (_numInst[i] - _coldMiss[i]);
+        //return sum / _numInst[i];
     }
 
 public:
