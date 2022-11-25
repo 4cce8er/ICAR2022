@@ -224,30 +224,26 @@ int main(int argc, char *argv[])
     if (useTimeSlot > 0) {
         timeSlotLen = useTimeSlot;
     }
-    std::vector<unsigned> timeSlotStart;
-    // just remember the starting index of each timeslot
+
+    /** Get run-time stats from sampled trace */
+    statCache.clearStats();
     unsigned nextSlotStart = 0;
-    while (true) {
-        timeSlotStart.push_back(nextSlotStart);
+    bool finished = false;
+    while (!finished) {
+        unsigned from = nextSlotStart;
         nextSlotStart += timeSlotLen;
         // last slot cannot be too small
         if (nextSlotStart >= sampledSize
                 || sampledSize - nextSlotStart < timeSlotLen / 2) {
             // push one sampledSize at the end
-            timeSlotStart.push_back(sampledSize);
-            break;
+            nextSlotStart = sampledSize;
+            finished = true;
         }
+        statCache.runTimeStatsFull(sampledTraces, from, nextSlotStart - from);
+        //std::cout << "Chunk " << i <<" size " 
+        //        << to - from << std::endl;
     }
 
-    /** Get run-time stats from sampled trace */
-    statCache.clearStats();
-    for (int i = 0; i < timeSlotStart.size() - 1; ++i) {
-        unsigned from = timeSlotStart[i];
-        unsigned to = timeSlotStart[i + 1];
-        statCache.runTimeStatsFull(sampledTraces, from, to - from);
-        std::cout << "Chunk " << i <<" size " 
-                << to - from << std::endl;
-    }
     std::cout << "Chunk count: " << statCache.getChunkCount() << std::endl;
     std::cout << "Cold misses is " << statCache.getTotalColdMiss() << std::endl;
 
