@@ -19,6 +19,9 @@ all: $(TARGETS)
 cachePirate : cachePirate.cc
 	$(CXX) $(CXX_FLAGS) $< -o $@ -I$(PCM_PATH)/src/ -lpcm -L$(PCM_PATH)/build/lib/
 
+forkTest : forkTest.cc
+	$(CXX) $(CXX_FLAGS)  $< -o $@
+
 .PHONY: clean
 clean:
 	rm -f $(TARGETS)
