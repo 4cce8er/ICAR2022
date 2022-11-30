@@ -1,6 +1,5 @@
 #include <iostream>
 #include "assert.h"
-#include <dlfcn.h>
 /** API: https://intel-pcm-api-documentation.github.io/classPCM.html */
 #include "cpucounters.h" // Intel PCM
 #include "mm_malloc.h"
@@ -25,7 +24,7 @@ public:
     }
 
     void pirate(unsigned waysToSteal) {
-        assert(waysToSteal < _cacheAssoc);
+        assert(waysToSteal <= _cacheAssoc);
         volatile uint8_t* data = (volatile uint8_t*)_data;
         char discard __attribute__((unused));
         for (unsigned i = 0; i < _waySize; i += _blkSize) {
@@ -38,29 +37,7 @@ public:
 
 int main(int argc, char* argv[]) 
 {
-/*
-	void * handle = dlopen("libpcm.so", RTLD_LAZY);
-	if(!handle) {
-		printf("Abort: could not (dynamically) load shared library \n");
-		return -1;
-	}
-
-	pcm::PCM.pcm_c_build_core_event = (int (*)(uint8_t, const char *)) dlsym(handle, "pcm_c_build_core_event");
-	pcm::PCM.pcm_c_init = (int (*)()) dlsym(handle, "pcm_c_init");
-	pcm::PCM.pcm_c_start = (void (*)()) dlsym(handle, "pcm_c_start");
-	pcm::PCM.pcm_c_stop = (void (*)()) dlsym(handle, "pcm_c_stop");
-	pcm::PCM.pcm_c_get_cycles = (uint64_t (*)(uint32_t)) dlsym(handle, "pcm_c_get_cycles");
-	pcm::PCM.pcm_c_get_instr = (uint64_t (*)(uint32_t)) dlsym(handle, "pcm_c_get_instr");
-	pcm::PCM.pcm_c_get_core_event = (uint64_t (*)(uint32_t,uint32_t)) dlsym(handle, "pcm_c_get_core_event");
-
-
-	if(pcm::PCM.pcm_c_init == NULL || PCM.pcm_c_start == NULL || PCM.pcm_c_stop == NULL ||
-			PCM.pcm_c_get_cycles == NULL || PCM.pcm_c_get_instr == NULL ||
-			PCM.pcm_c_build_core_event == NULL || PCM.pcm_c_get_core_event == NULL)
-		return -1;
-
-    pcm::pcm_c_init();
-*/
+    /** Initialize PCM */
     pcm::PCM * m = pcm::PCM::getInstance();
     m->program(pcm::PCM::DEFAULT_EVENTS, NULL);
 
