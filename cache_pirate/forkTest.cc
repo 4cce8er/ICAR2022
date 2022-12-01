@@ -3,6 +3,7 @@
 #include "mm_malloc.h"
 #include <sched.h>
 #include <stdio.h>
+#include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -18,15 +19,19 @@ class CachePirate
 
 public:
     CachePirate(unsigned size, unsigned assoc)
-        : _cacheSize(size), _cacheAssoc(assoc)
+        : _cacheSize(size), _cacheAssoc(assoc), 
     {
         _waySize = _cacheSize / _cacheAssoc;
-        _data = (uint8_t *)_mm_malloc(_cacheSize, _waySize);
+        //_data = (uint8_t*)_mm_malloc(_cacheSize, _waySize);
+        _data = (uint8_t*)mmap(NULL, 4 * (1 << 21), PROT_READ | PROT_WRITE,
+                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
+                 -1, 0);
     }
 
     ~CachePirate()
     {
-        _mm_free(_data);
+        //_mm_free(_data);
+        munmap(_data, 4 * (1 << 21));
     }
 
     void pirate(unsigned waysToSteal)
@@ -148,9 +153,10 @@ int main(int argc, char *argv[])
             // pcm::PCM *m = pcm::PCM::getInstance();
             // m->program(pcm::PCM::DEFAULT_EVENTS, NULL);
 
-            pcm::CoreCounterState coreBeforeStates[8];
-            pcm::CoreCounterState coreAfterStates[8];
-            for (int i = 0; i < 8; i++)
+            const int coreNum = 4;
+            pcm::CoreCounterState coreBeforeStates[coreNum];
+            pcm::CoreCounterState coreAfterStates[coreNum];
+            for (int i = 0; i < coreNum; i++)
             {
                 coreBeforeStates[i] = pcm::getCoreCounterState(i);
             }
@@ -171,12 +177,12 @@ int main(int argc, char *argv[])
             uint64_t core_l3Hit = 0;
             uint64_t core_cycles = 0;
 
-            for (int i = 0; i < 8; i++)
+            for (int i = 0; i < coreNum; i++)
             {
                 coreAfterStates[i] = pcm::getCoreCounterState(i);
             }
 
-            for (int i = 0; i < 8; i++)
+            for (int i = 0; i < coreNum; i++)
             {
                 uint64_t curCore_l3Misses = pcm::getL3CacheMisses(coreBeforeStates[i], coreAfterStates[i]);
                 uint64_t curCore_l3Hits = pcm::getL3CacheHits(coreBeforeStates[i], coreAfterStates[i]);

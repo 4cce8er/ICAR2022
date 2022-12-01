@@ -3,6 +3,7 @@
 /** API: https://intel-pcm-api-documentation.github.io/classPCM.html */
 #include "cpucounters.h" // Intel PCM
 #include "mm_malloc.h"
+#include <sys/mman.h>
 
 class CachePirate {
     const unsigned _blkSize = 64;
@@ -16,11 +17,13 @@ public:
     CachePirate(unsigned size, unsigned assoc) 
     : _cacheSize(size), _cacheAssoc(assoc) {
         _waySize = _cacheSize / _cacheAssoc;
-        _data = (uint8_t*)_mm_malloc(_cacheSize, _waySize);
+        _data = (uint8_t*)mmap(NULL, 4 * (1 << 21), PROT_READ | PROT_WRITE,
+                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
+                 -1, 0);
     }
 
     ~CachePirate() {
-        _mm_free(_data);
+        //_mm_free(_data);
     }
 
     void pirate(unsigned waysToSteal) {
