@@ -19,7 +19,7 @@ class CachePirate
 
 public:
     CachePirate(unsigned size, unsigned assoc)
-        : _cacheSize(size), _cacheAssoc(assoc), 
+        : _cacheSize(size), _cacheAssoc(assoc) 
     {
         _waySize = _cacheSize / _cacheAssoc;
         //_data = (uint8_t*)_mm_malloc(_cacheSize, _waySize);
@@ -135,17 +135,7 @@ int main(int argc, char *argv[])
             CachePirate cp(8 * 1024 * 1024, 16);
             while (true)
             {
-                // pcm::SystemCounterState beforeState = pcm::getSystemCounterState();
-                // Call the pirate
                 cp.pirate(stealWayNum);
-                // pcm::SystemCounterState afterState = pcm::getSystemCounterState();
-                // uint64_t l3Misses = pcm::getL3CacheMisses(beforeState, afterState);
-                // uint64_t l3Hits = pcm::getL3CacheHits(beforeState, afterState);
-                // uint64_t cycles = pcm::getCycles(beforeState, afterState);
-
-                // std::cout << "l3Misses = " << l3Misses << std::endl;
-                // std::cout << "l3Hits = " << l3Hits << std::endl;
-                // std::cout << "cyles = " << cycles << std::endl;
             }
         }
         else
@@ -190,6 +180,7 @@ int main(int argc, char *argv[])
 
                 std::cout << "core " << i << " l3Misses = " << curCore_l3Misses << std::endl;
                 std::cout << "core " << i << " l3Hits = " << curCore_l3Hits << std::endl;
+                std::cout << "core " << i << " l3Miss Ratio = " << (double)curCore_l3Misses / (curCore_l3Misses + curCore_l3Hits) << std::endl;
                 std::cout << "core " << i << " cyles = " << curCore_cycles << std::endl;
 
                 core_l3Misses += curCore_l3Misses;
@@ -204,11 +195,13 @@ int main(int argc, char *argv[])
 
             std::cout << "System l3Misses = " << sys_l3Misses << std::endl;
             std::cout << "System l3Hits = " << sys_l3Hits << std::endl;
-            std::cout << "System  cyles = " << sys_cycles << std::endl;
+            std::cout << "System l3Miss Ratio " << (double)sys_l3Misses / (sys_l3Misses + sys_l3Hits) << std::endl;
+            std::cout << "System cyles = " << sys_cycles << std::endl;
 
             std::cout << "core l3Misses = " << core_l3Misses << std::endl;
             std::cout << "core l3Hits = " << core_l3Hit << std::endl;
-            std::cout << "core  cyles = " << core_cycles << std::endl;
+            std::cout << "core l3Miss Ratio " << (double)core_l3Misses / (core_l3Misses + sys_l3Hits) << std::endl;
+            std::cout << "core cyles = " << core_cycles << std::endl;
         }
     }
 
