@@ -84,7 +84,7 @@ int main(int argc, char *argv[])
     stealWayNum = atoi(argv[1]);
     std::cout << "Arg stealWayNum: " << stealWayNum << std::endl;
 
-    std::cout << "-------------------------------" << get_page_size() << std::endl;
+    //std::cout << "Page size:" << get_page_size() << std::endl;
 
     pid_t childPid = fork();
 
@@ -123,13 +123,9 @@ int main(int argc, char *argv[])
         {
             std::cout << "sched_getaffinity did not succeed" << std::endl;
         }
-        std::cout << "Parent pid = " << getpid() << ", cpu = " << CPU_COUNT(&my_set)
-                  << ", sched_getcpu() = " << sched_getcpu() << std::endl;
-        CPU_CLR(0, &my_set); /* remove core CPU zero form parent/pirate process */
-        //CPU_ZERO(&my_set);   /* Initialize it all to 0, i.e. no CPUs selected. */
-        //CPU_SET(1, &my_set);
-        //CPU_SET(2, &my_set);
-        
+        //CPU_CLR(0, &my_set); /* remove core CPU zero form parent/pirate process */
+        CPU_ZERO(&my_set);   /* Initialize it all to 0, i.e. no CPUs selected. */
+        CPU_SET(1, &my_set);
         result = sched_setaffinity(getpid(), sizeof(cpu_set_t),
                                    &my_set); // Set affinity of tihs process to  the defined mask, i.e. only 0
         if (result != 0)
@@ -143,6 +139,14 @@ int main(int argc, char *argv[])
 
         if (piratePid == 0)
         {
+            CPU_ZERO(&my_set);   /* Initialize it all to 0, i.e. no CPUs selected. */
+            CPU_SET(2, &my_set);
+            result = sched_setaffinity(getpid(), sizeof(cpu_set_t),
+                                    &my_set); // Set affinity of tihs process to  the defined mask, i.e. only 0
+            if (result != 0)
+            {
+                std::cout << "sched_setaffinity did not succeed" << std::endl;
+            }
             std::cout << "Pirate pid = " << getpid() << ", cpu = " << CPU_COUNT(&my_set)
                     << ", sched_getcpu() = " << sched_getcpu() << std::endl;
             // Hard-coded 2 threads
