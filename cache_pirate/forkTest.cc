@@ -41,8 +41,6 @@ public:
         volatile uint8_t *data = (volatile uint8_t *)_data;
         char discard __attribute__((unused));
 
-        // TODO omp for multithread pirate
-
         for (unsigned i = 0; i < _waySize; i += _blkSize)
         {
             for (unsigned j = 0; j < waysToSteal; ++j)
@@ -72,6 +70,7 @@ size_t get_page_size(void)
 
 int main(int argc, char *argv[])
 {
+    
     unsigned stealWayNum = 0;
     // argv = [forkTest, 8, benchmark, benchmarkArg0, benchmarkArgu1, ....]
     if (argc < 3)
@@ -85,7 +84,7 @@ int main(int argc, char *argv[])
     stealWayNum = atoi(argv[1]);
     std::cout << "Arg stealWayNum: " << stealWayNum << std::endl;
 
-    //std::cout << "-------------------------------" << get_page_size() << std::endl;
+    std::cout << "-------------------------------" << get_page_size() << std::endl;
 
     pid_t childPid = fork();
 
@@ -126,9 +125,11 @@ int main(int argc, char *argv[])
         }
         std::cout << "Parent pid = " << getpid() << ", cpu = " << CPU_COUNT(&my_set)
                   << ", sched_getcpu() = " << sched_getcpu() << std::endl;
-        //CPU_CLR(0, &my_set); /* remove core CPU zero form parent/pirate process */
-        CPU_ZERO(&my_set);   /* Initialize it all to 0, i.e. no CPUs selected. */
-        CPU_SET(1, &my_set); /* remove core CPU zero form parent/pirate process */
+        CPU_CLR(0, &my_set); /* remove core CPU zero form parent/pirate process */
+        //CPU_ZERO(&my_set);   /* Initialize it all to 0, i.e. no CPUs selected. */
+        //CPU_SET(1, &my_set);
+        //CPU_SET(2, &my_set);
+        
         result = sched_setaffinity(getpid(), sizeof(cpu_set_t),
                                    &my_set); // Set affinity of tihs process to  the defined mask, i.e. only 0
         if (result != 0)
@@ -209,10 +210,15 @@ int main(int argc, char *argv[])
                 uint64_t curCore_l3Hits = pcm::getL3CacheHits(coreBeforeStates[i], coreAfterStates[i]);
                 uint64_t curCore_cycles = pcm::getCycles(coreBeforeStates[i], coreAfterStates[i]);
 
+                double curCore_ipc = pcm::getIPC(coreBeforeStates[i], coreAfterStates[i]);
+                uint64_t curCore_retiredInst = pcm::getInstructionsRetired(coreBeforeStates[i], coreAfterStates[i]);
+
                 std::cout << "core " << i << " l3Misses = " << curCore_l3Misses << std::endl;
                 std::cout << "core " << i << " l3Hits = " << curCore_l3Hits << std::endl;
                 std::cout << "core " << i << " l3Miss Ratio = " << (double)curCore_l3Misses / (curCore_l3Misses + curCore_l3Hits) << std::endl;
                 std::cout << "core " << i << " cyles = " << curCore_cycles << std::endl;
+                std::cout << "core " << i << " IPC = " << curCore_ipc << std::endl;
+                std::cout << "core " << i << " Instructions = " << curCore_retiredInst << std::endl;
 
                 core_l3Misses += curCore_l3Misses;
                 core_l3Hit += curCore_l3Hits;
