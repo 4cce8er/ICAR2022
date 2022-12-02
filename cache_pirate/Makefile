@@ -1,3 +1,4 @@
+CXX_FLAGS += -fopenmp -lpthread
 ifneq ($(DEBUG),)
     CXX_FLAGS += -std=c++11 -O0 -g -Wall
 else

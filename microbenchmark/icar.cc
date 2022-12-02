@@ -1,6 +1,7 @@
 #include <iostream>
 #include "mm_malloc.h"
 #include <sched.h>
+#include <sys/mman.h>
 #include <unistd.h>
 
 /* dummy functions used by pin */
@@ -20,13 +21,16 @@ int main(int argc, char *argv[])
 {
     // ROI starts at the beginning of a program by default
     PIN_Stop();
-    int work_iteration = 100000;
+    int work_iteration = 10000;
 
     const int full_size = 32 * 1024 * 1024; /* Full iteration is 32 MB */
-    const int part_size = 128 * 1024;       /* A partial-iteration of 128 KB */
+    const int part_size = 2048 * 1024;       /* A partial-iteration of 128 KB */
     const int stride = 32;                  /* 2 elements used per line */
-    volatile unsigned char *array =
-        (unsigned char *)_mm_malloc(full_size * sizeof(unsigned char), 64);
+    volatile unsigned char *array = 
+                (unsigned char*)mmap(NULL, 16 * (1 << 21), PROT_READ | PROT_WRITE,
+                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
+                 -1, 0);
+        //(unsigned char *)_mm_malloc(full_size * sizeof(unsigned char), 64);
 
     unsigned char container;
     int i, j;
@@ -65,7 +69,8 @@ int main(int argc, char *argv[])
     std::cout << "ICAR microbenchmark finished\n";
     std::cout << "Printing out the container just for the sake compiler don't optimize it out " << container << std::endl;
 
-    _mm_free((void *)array);
+    //_mm_free((void *)array);
+    munmap((void*)array, 16 * (1 << 21));
 
     return 0;
 }
