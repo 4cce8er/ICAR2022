@@ -1,6 +1,7 @@
 /** API: https://intel-pcm-api-documentation.github.io/classPCM.html */
 #include "cpucounters.h" // Intel PCM
 #include "mm_malloc.h"
+#include "omp.h"
 #include <sched.h>
 #include <stdio.h>
 #include <sys/mman.h>
@@ -31,7 +32,7 @@ public:
     ~CachePirate()
     {
         //_mm_free(_data);
-        munmap(_data, 4 * (1 << 21));
+        munmap((void*)_data, 4 * (1 << 21));
     }
 
     void pirate(unsigned waysToSteal)
@@ -52,6 +53,23 @@ public:
     }
 };
 
+size_t get_page_size(void)
+{
+    size_t n;
+    char *p;
+    int u;
+    for (n = 1; n; n *= 2) {
+        p = (char*)mmap(0, n * 2, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
+        if (p == MAP_FAILED)
+            return -1;
+        u = munmap((void*)(p + n), n);
+        munmap((void*)p, n * 2);
+        if (!u)
+            return n;
+    }
+    return -1;
+}
+
 int main(int argc, char *argv[])
 {
     unsigned stealWayNum = 0;
@@ -66,6 +84,8 @@ int main(int argc, char *argv[])
 
     stealWayNum = atoi(argv[1]);
     std::cout << "Arg stealWayNum: " << stealWayNum << std::endl;
+
+    //std::cout << "-------------------------------" << get_page_size() << std::endl;
 
     pid_t childPid = fork();
 
@@ -90,12 +110,6 @@ int main(int argc, char *argv[])
             return -1;
         }
 
-        // std::string targetProgramStr = argv[2];
-        // for(int i = 3; i < argc; i++){
-        //     targetProgramStr += " " + std::string(argv[i]);
-        // }
-        // system(targetProgramStr.c_str());
-
         std::cout << "Target call completed\n";
         exit(1);
     }
@@ -112,7 +126,9 @@ int main(int argc, char *argv[])
         }
         std::cout << "Parent pid = " << getpid() << ", cpu = " << CPU_COUNT(&my_set)
                   << ", sched_getcpu() = " << sched_getcpu() << std::endl;
-        CPU_CLR(0, &my_set); /* remove core CPU zero form parent/pirate process */
+        //CPU_CLR(0, &my_set); /* remove core CPU zero form parent/pirate process */
+        CPU_ZERO(&my_set);   /* Initialize it all to 0, i.e. no CPUs selected. */
+        CPU_SET(1, &my_set); /* remove core CPU zero form parent/pirate process */
         result = sched_setaffinity(getpid(), sizeof(cpu_set_t),
                                    &my_set); // Set affinity of tihs process to  the defined mask, i.e. only 0
         if (result != 0)
@@ -126,16 +142,21 @@ int main(int argc, char *argv[])
 
         if (piratePid == 0)
         {
-            // pcm::PCM *m = pcm::PCM::getInstance();
-            // m->program(pcm::PCM::DEFAULT_EVENTS, NULL);
-
-            // if (m->program() != pcm::PCM::Success) {
-            //     return -1;
-            // }
-            CachePirate cp(8 * 1024 * 1024, 16);
-            while (true)
-            {
-                cp.pirate(stealWayNum);
+            std::cout << "Pirate pid = " << getpid() << ", cpu = " << CPU_COUNT(&my_set)
+                    << ", sched_getcpu() = " << sched_getcpu() << std::endl;
+            // Hard-coded 2 threads
+            CachePirate* pcp[2];
+            CachePirate cp1(8 * 1024 * 1024, 16);
+            CachePirate cp2(8 * 1024 * 1024, 16);
+            pcp[0] = &cp1;
+            pcp[1] = &cp2;
+            #pragma omp parallel for
+            for (int i = 0; i < 2; i++) {
+                std::cout << sched_getcpu() << std::endl;
+                while (true)
+                {
+                    pcp[i]->pirate(stealWayNum / 2);
+                }
             }
         }
         else
@@ -162,6 +183,16 @@ int main(int argc, char *argv[])
 
             // Kill the pirate
             kill(piratePid, SIGKILL);
+
+            /** Alternative version of timeout
+             * {@
+             */
+            //waitpid(childPid, &status, WUNTRACED);
+            //sleep(60);
+            //if (0 == waitpid(childPid, &status, WNOHANG)) {}
+            //kill(childPid, SIGKILL);
+            //kill(piratePid, SIGKILL);
+            //std::cout << "Child returned\n";
 
             uint64_t core_l3Misses = 0;
             uint64_t core_l3Hit = 0;
