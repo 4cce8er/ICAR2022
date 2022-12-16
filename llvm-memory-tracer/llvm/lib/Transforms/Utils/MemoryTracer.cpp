@@ -67,33 +67,35 @@ PreservedAnalyses MemoryTracerPass::run(Module &M, ModuleAnalysisManager &MAM) {
 	Value *charPtr = builder->CreatePointerCast(loadStringPointer,
 			PointerType::get(Type::getInt8Ty(M.getContext()), 0));
 
+	//Overhead for file name argument "result.txt"
 	// Defining and initializing global variables corresponding to message strings
-	Constant *fileString = ConstantDataArray::getString(M.getContext(),
-			"results.txt");
-	GlobalVariable *fileStringVariable = new GlobalVariable(M,
-			fileString->getType(), true, Function::InternalLinkage, fileString,
-			"file_string");
+//	Constant *fileString = ConstantDataArray::getString(M.getContext(),
+//			"results.txt");
+//	GlobalVariable *fileStringVariable = new GlobalVariable(M,
+//			fileString->getType(), true, Function::InternalLinkage, fileString,
+//			"file_string");
+//
+//	std::vector<Constant*> beginAtFileString;
+//	Constant *fileStringPointer = ConstantExpr::getGetElementPtr(
+//			fileString->getType(), fileStringVariable, beginAtFileString);
+//
+//	Value *filecharPtr = builder->CreatePointerCast(fileStringPointer,
+//			PointerType::get(Type::getInt8Ty(M.getContext()), 0));
 
-	std::vector<Constant*> beginAtFileString;
-	Constant *fileStringPointer = ConstantExpr::getGetElementPtr(
-			fileString->getType(), fileStringVariable, beginAtFileString);
+	//Overhead for file mode argument "w+"
+//	Constant *modeString = ConstantDataArray::getString(M.getContext(), "w+");
+//	GlobalVariable *modeStringVariable = new GlobalVariable(M,
+//			modeString->getType(), true, Function::InternalLinkage, modeString,
+//			"mode_string");
 
-	Value *filecharPtr = builder->CreatePointerCast(fileStringPointer,
-			PointerType::get(Type::getInt8Ty(M.getContext()), 0));
+//	std::vector<Constant*> beginAtModeString;
+//	Constant *modeStringPointer = ConstantExpr::getGetElementPtr(
+//			modeString->getType(), modeStringVariable, beginAtModeString);
 
-	Constant *modeString = ConstantDataArray::getString(M.getContext(), "w+");
-	GlobalVariable *modeStringVariable = new GlobalVariable(M,
-			modeString->getType(), true, Function::InternalLinkage, modeString,
-			"mode_string");
+//	Value *modecharPtr = builder->CreatePointerCast(modeStringPointer,
+//			PointerType::get(Type::getInt8Ty(M.getContext()), 0));
 
-	std::vector<Constant*> beginAtModeString;
-	Constant *modeStringPointer = ConstantExpr::getGetElementPtr(
-			modeString->getType(), modeStringVariable, beginAtModeString);
-
-	Value *modecharPtr = builder->CreatePointerCast(modeStringPointer,
-			PointerType::get(Type::getInt8Ty(M.getContext()), 0));
-
-	Value *pFile;
+//	Value *pFile;
 	StructType *IO_FILE_ty;
 	PointerType *IO_FILE_PTR_ty;
 
@@ -142,114 +144,254 @@ PreservedAnalyses MemoryTracerPass::run(Module &M, ModuleAnalysisManager &MAM) {
 
 		// We know we've encountered a main module∫
 		// we get the entry block of it
-		if ((F.getName() == "main")) {
-			// Returns a pointer to the first instruction in this block
-			// that is not a PHINode instruction
-			Instruction *inst = F.getEntryBlock().getFirstNonPHI();
+//		if ((F.getName() == "main")) {
+//			// Returns a pointer to the first instruction in this block
+//			// that is not a PHINode instruction
+//			Instruction *inst = F.getEntryBlock().getFirstNonPHI();
+//
+//			IRBuilder<> *builder = new IRBuilder<>(M.getContext());
+//			builder->SetInsertPoint(inst);
+//
+//			SmallVector<Value*, 8> Args { filecharPtr, modecharPtr };
+//
+//			pFile = emitLibCall(LibFunc_fopen, IO_FILE_PTR_ty,
+//					{ builder->getInt8PtrTy(), builder->getInt8PtrTy() }, Args,
+//					*builder, &TLI, /*IsVaArgs=*/
+//					true);
+//
+//			for (BasicBlock &B : F) {
+//				if (isa<ReturnInst>(B.getTerminator())) {
+//					SmallVector<Value*, 8> Args { pFile };
+//					builder->SetInsertPoint(B.getTerminator());
+//
+//					builder->CreateCall(CalleeF_fclose, Args);
+//
+//				}
+//			}
+//
+//		}
 
-			IRBuilder<> *builder = new IRBuilder<>(M.getContext());
-			builder->SetInsertPoint(inst);
 
-			SmallVector<Value*, 8> Args { filecharPtr, modecharPtr };
+		Value *addressByteArray;
+		if(!F.isDeclaration()) {
 
-			pFile = emitLibCall(LibFunc_fopen, IO_FILE_PTR_ty,
-					{ builder->getInt8PtrTy(), builder->getInt8PtrTy() }, Args,
-					*builder, &TLI, /*IsVaArgs=*/
-					true);
+			builder->SetInsertPoint(F.getEntryBlock().getFirstNonPHI());
+			addressByteArray = builder->CreateAlloca(
+					builder->getInt64Ty());
+		}
 
-			for (BasicBlock &B : F) {
-				if (isa<ReturnInst>(B.getTerminator())) {
-					SmallVector<Value*, 8> Args { pFile };
-					builder->SetInsertPoint(B.getTerminator());
 
-					builder->CreateCall(CalleeF_fclose, Args);
+		for (BasicBlock &B : F) {
+			// Handling the constant expressions, e.g. expressions as arguments to functions etc.
+			// Because some getElementPtr instrcutions are inside them
+			for (Instruction &I : B) {
+				GetElementPtrInst *getInstr = nullptr;
+
+				ConstantExpr *constantExpr;
+
+				for (auto operand = I.operands().begin();
+						operand != I.operands().end(); ++operand) {
+//					errs() << *(operand->get()) << "\n";
+					if ((constantExpr = dyn_cast<ConstantExpr>(operand->get()))
+							!= nullptr) {
+						Instruction *constantEprAsInst =
+								constantExpr->getAsInstruction(&I);
+
+						if ((getInstr = dyn_cast<GetElementPtrInst>(
+								constantEprAsInst)) != nullptr) {
+
+						} else {
+							constantEprAsInst->eraseFromParent();
+
+						}
+					}
 
 				}
 			}
 
-		}
-
-		for (BasicBlock &B : F) {
-
-			Instruction *inst = F.getEntryBlock().getFirstNonPHI();
-
-			builder->SetInsertPoint(inst);
-
-			Value *addressByteArray = builder->CreateAlloca(
-					builder->getInt64Ty(),
-					ConstantInt::get(IntegerType::getInt32Ty(M.getContext()),
-							1/*value*/, true));
-			Value *addressByteArrayPtr = builder->CreateGEP(
-					builder->getInt64Ty(), addressByteArray, indexList);
-
+			std::vector<GetElementPtrInst*> gepInstructions;
+//			std::vector<LoadInst*> loadInstructions;
+//			std::vector<StoreInst*> storeInstructions;
 			for (Instruction &I : B) {
-
-//				errs() << I << "\n";
 
 				LoadInst *load = nullptr;
 				StoreInst *store = nullptr;
 
-				if ((load = dyn_cast<LoadInst>(&I)) != nullptr) { // Check if the current instruction is a load
+				GetElementPtrInst *getInstr = nullptr;
 
-					Value *address = load->getPointerOperand(); // Getting source address
-
-					builder->SetInsertPoint(&I);
-
-					Value *stdErrorVarPtr = builder->CreateGEP(IO_FILE_PTR_ty,
-							stdErrorVar, indexList);
-					Value *stdErrorVarActualPtr = builder->CreateLoad(
-							IO_FILE_PTR_ty, stdErrorVarPtr);
-
-//					SmallVector<Value*, 8> Args { stdErrorVarActualPtr, charPtr };
-//					ArrayRef<Value*> VariadicArgs = { address };
-//					llvm::append_range(Args, VariadicArgs);
-//
-//					builder->CreateCall(CalleeF_fprintf, Args);
-
-					Value *bitCasted = builder->CreatePtrToInt(address,
-							builder->getInt64Ty());
-
-					builder->CreateStore(bitCasted, addressByteArrayPtr);
-
-					SmallVector<Value*, 8> Args { addressByteArrayPtr,
-							ConstantInt::get(
-									IntegerType::getInt64Ty(M.getContext()),
-									8/*value*/, true), ConstantInt::get(
-									IntegerType::getInt64Ty(M.getContext()),
-									1/*value*/, true), stdErrorVarActualPtr };
-
-					builder->CreateCall(CalleeF_fwrite, Args);
-
-					SmallVector<Value*, 8> printArgs { charPtr };
-					ArrayRef<Value*> VariadicArgs = { address };
-					llvm::append_range(printArgs, VariadicArgs);
-					emitLibCall(LibFunc_printf, builder->getInt32Ty(),
-							{ builder->getInt8PtrTy(), }, printArgs, *builder, &TLI, /*IsVaArgs=*/
-							true);
-
-//					emitLibCall(LibFunc_strlen, SizeTTy,
-//							builder->getInt8PtrTy(), charPtr, *builder, &TLI);
-
-//					errs() << CalleeF.getFunctionType()->getNumParams() << "\n";
-
-//					std::string type_str;
-//					llvm::raw_string_ostream rso(type_str);
-//					CalleeF.getFunctionType()->getParamType(0)->print(rso);
-//					errs() << rso.str() << "\n";
-//
-//					loadStringPointer->getType()->print(rso);
-//					errs() << rso.str() << "\n";
-//
-//					builder->CreateCall(CalleeF, args);
-
-				} else if ((store = dyn_cast<StoreInst>(&I)) != nullptr) { // Check if the current instruction is a store
-
-					Value *value = store->getValueOperand(); // Getting the value to be stored at given address
-					Value *address = store->getPointerOperand(); // Getting source address
-
-//					errs() << address << "\n";
+				if ((getInstr = dyn_cast<GetElementPtrInst>(&I)) != nullptr) {
+					gepInstructions.push_back(getInstr);
 				}
+
+//				if ((load = dyn_cast<LoadInst>(&I)) != nullptr) {
+//					loadInstructions.push_back(load);
+//				}
+//
+//				else if ((store = dyn_cast<StoreInst>(&I)) != nullptr) {
+//					storeInstructions.push_back(store);
+//				}
+
+//				if ((load = dyn_cast<LoadInst>(&I)) != nullptr) { // Check if the current instruction is a load
+//
+//					Value *address = load->getPointerOperand(); // Getting source address
+//
+//					builder->SetInsertPoint(&I);
+//
+//					Value *stdErrorVarPtr = builder->CreateGEP(IO_FILE_PTR_ty,
+//							stdErrorVar, indexList);
+//					Value *stdErrorVarActualPtr = builder->CreateLoad(
+//							IO_FILE_PTR_ty, stdErrorVarPtr);
+//
+////					SmallVector<Value*, 8> Args { stdErrorVarActualPtr, charPtr };
+////					ArrayRef<Value*> VariadicArgs = { address };
+////					llvm::append_range(Args, VariadicArgs);
+////
+////					builder->CreateCall(CalleeF_fprintf, Args);
+//
+//					Value *bitCasted = builder->CreatePtrToInt(address,
+//							builder->getInt64Ty());
+//
+//					builder->CreateStore(bitCasted, addressByteArrayPtr);
+//
+//					SmallVector<Value*, 8> Args { addressByteArrayPtr,
+//							ConstantInt::get(
+//									IntegerType::getInt64Ty(M.getContext()),
+//									8/*value*/, true), ConstantInt::get(
+//									IntegerType::getInt64Ty(M.getContext()),
+//									1/*value*/, true), stdErrorVarActualPtr };
+//
+//					builder->CreateCall(CalleeF_fwrite, Args);
+//
+//					SmallVector<Value*, 8> printArgs { charPtr };
+//					ArrayRef<Value*> VariadicArgs = { address };
+//					llvm::append_range(printArgs, VariadicArgs);
+//					emitLibCall(LibFunc_printf, builder->getInt32Ty(),
+//							{ builder->getInt8PtrTy(), }, printArgs, *builder,
+//							&TLI, /*IsVaArgs=*/
+//							true);
+//
+////					emitLibCall(LibFunc_strlen, SizeTTy,
+////							builder->getInt8PtrTy(), charPtr, *builder, &TLI);
+//
+////					errs() << CalleeF.getFunctionType()->getNumParams() << "\n";
+//
+////					std::string type_str;
+////					llvm::raw_string_ostream rso(type_str);
+////					CalleeF.getFunctionType()->getParamType(0)->print(rso);
+////					errs() << rso.str() << "\n";
+////
+////					loadStringPointer->getType()->print(rso);
+////					errs() << rso.str() << "\n";
+////
+////					builder->CreateCall(CalleeF, args);
+//
+//				} else if ((store = dyn_cast<StoreInst>(&I)) != nullptr) { // Check if the current instruction is a store
+//
+//					Value *address = store->getPointerOperand(); // Getting source address
+//
+//					builder->SetInsertPoint(&I);
+//
+//					Value *stdErrorVarPtr = builder->CreateGEP(IO_FILE_PTR_ty,
+//							stdErrorVar, indexList);
+//					Value *stdErrorVarActualPtr = builder->CreateLoad(
+//							IO_FILE_PTR_ty, stdErrorVarPtr);
+//
+//					Value *bitCasted = builder->CreatePtrToInt(address,
+//							builder->getInt64Ty());
+//
+//					builder->CreateStore(bitCasted, addressByteArrayPtr);
+//
+//					SmallVector<Value*, 8> Args { addressByteArrayPtr,
+//							ConstantInt::get(
+//									IntegerType::getInt64Ty(M.getContext()),
+//									8/*value*/, true), ConstantInt::get(
+//									IntegerType::getInt64Ty(M.getContext()),
+//									1/*value*/, true), stdErrorVarActualPtr };
+//
+//					builder->CreateCall(CalleeF_fwrite, Args);
+//
+//					SmallVector<Value*, 8> printArgs { charPtr };
+//					ArrayRef<Value*> VariadicArgs = { address };
+//					llvm::append_range(printArgs, VariadicArgs);
+//					emitLibCall(LibFunc_printf, builder->getInt32Ty(),
+//							{ builder->getInt8PtrTy(), }, printArgs, *builder,
+//							&TLI, /*IsVaArgs=*/
+//							true);
+//
+////					errs() << address << "\n";
+//				}
 			}
+
+			for (auto I : gepInstructions) {
+
+				builder->SetInsertPoint(I->getNextNode());
+
+				Value *address = I;
+
+				Value *stdErrorVarPtr = builder->CreateGEP(IO_FILE_PTR_ty,
+						stdErrorVar, indexList);
+				Value *stdErrorVarActualPtr = builder->CreateLoad(
+						IO_FILE_PTR_ty, stdErrorVarPtr);
+
+				Value *bitCasted = builder->CreatePtrToInt(address,
+						builder->getInt64Ty());
+
+				builder->CreateStore(bitCasted, addressByteArray);
+
+				SmallVector<Value*, 8> Args { addressByteArray,
+						ConstantInt::get(
+								IntegerType::getInt64Ty(M.getContext()),
+								8/*value*/, true), ConstantInt::get(
+								IntegerType::getInt64Ty(M.getContext()),
+								1/*value*/, true), stdErrorVarActualPtr };
+
+				builder->CreateCall(CalleeF_fwrite, Args);
+
+//				SmallVector<Value*, 8> printArgs { charPtr };
+//				ArrayRef<Value*> VariadicArgs = { address };
+//				llvm::append_range(printArgs, VariadicArgs);
+//				emitLibCall(LibFunc_printf, builder->getInt32Ty(),
+//						{ builder->getInt8PtrTy(), }, printArgs, *builder, &TLI, /*IsVaArgs=*/
+//						true);
+
+			}
+
+//			for (auto I : loadInstructions) {
+//
+//				builder->SetInsertPoint(I);
+//
+////				Value *addressByteArrayPtr = builder->CreateGEP(
+////						builder->getInt64Ty(), addressByteArray, indexList);
+//
+//				Value *address = I->getPointerOperand();
+//
+//				Value *stdErrorVarPtr = builder->CreateGEP(IO_FILE_PTR_ty,
+//						stdErrorVar, indexList);
+//				Value *stdErrorVarActualPtr = builder->CreateLoad(
+//						IO_FILE_PTR_ty, stdErrorVarPtr);
+//
+//				Value *bitCasted = builder->CreatePtrToInt(address,
+//						builder->getInt64Ty());
+//
+//				builder->CreateStore(bitCasted, addressByteArray);
+//
+//				SmallVector<Value*, 8> Args { addressByteArray,
+//						ConstantInt::get(
+//								IntegerType::getInt64Ty(M.getContext()),
+//								8/*value*/, true), ConstantInt::get(
+//								IntegerType::getInt64Ty(M.getContext()),
+//								1/*value*/, true), stdErrorVarActualPtr };
+//
+//				builder->CreateCall(CalleeF_fwrite, Args);
+//
+//				SmallVector<Value*, 8> printArgs { charPtr };
+//				ArrayRef<Value*> VariadicArgs = { address };
+//				llvm::append_range(printArgs, VariadicArgs);
+//				emitLibCall(LibFunc_printf, builder->getInt32Ty(),
+//						{ builder->getInt8PtrTy(), }, printArgs, *builder, &TLI, /*IsVaArgs=*/
+//						true);
+//
+//			}
 		}
 	}
 

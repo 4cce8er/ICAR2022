@@ -1,0 +1,17 @@
+# compile into llvm IR
+../../../../software/llvm-project/build/bin/clang++ -O2 -emit-llvm -S icar.cc -c -o icar.ll
+
+# Run the custom optimization pass
+../llvm-project/build/bin/opt -passes=memorytracer "/Users/mehye120/DATA/PhD/software/llvm-test/icar.ll" -o "/Users/mehye120/DATA/PhD/software/llvm-test/icar_modified.ll" -S
+
+# Optimize the result again
+../llvm-project/build/bin/opt -O2 icar_modified.ll -o icar_opt.ll -S 
+
+# Generate the object code
+../llvm-project/build/bin/llc -filetype=obj icar_opt.ll -o icar_opt.o
+
+# Finally compile into binary
+../llvm-project/build/bin/clang++ icar_opt.o -o icar_opt  
+
+# Run the benchmark and collect the traces
+./icar_opt 3>&1 1>&2 2>&3 | gzip > microbenchmark_trace.gz
