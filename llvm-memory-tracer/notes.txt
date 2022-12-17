@@ -1,6 +1,9 @@
 # compile into llvm IR
 ../../../../software/llvm-project/build/bin/clang++ -O2 -emit-llvm -S icar.cc -c -o icar.ll
 
+# Link multiple ll files if necessary
+/Users/mehye120/DATA/PhD/software/llvm-project/build/bin/llvm-link main.ll lbm.ll -o linked.ll
+
 # Run the custom optimization pass
 ../llvm-project/build/bin/opt -passes=memorytracer "/Users/mehye120/DATA/PhD/software/llvm-test/icar.ll" -o "/Users/mehye120/DATA/PhD/software/llvm-test/icar_modified.ll" -S
 

@@ -13,6 +13,7 @@
 #include "llvm/Transforms/Utils/BuildLibCalls.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/IR/GlobalVariable.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
 #include <stdio.h>
 
@@ -74,6 +75,16 @@ PreservedAnalyses MemoryTracerPass::run(Module &M, ModuleAnalysisManager &MAM) {
 			Function::InternalLinkage,
 			ConstantInt::get(IntegerType::getInt64Ty(M.getContext()),
 					0/*value*/, true));
+
+	GlobalVariable *memoryInstcounterVariable = new GlobalVariable(M,
+			IntegerType::getInt64Ty(M.getContext()), false,
+			Function::InternalLinkage,
+			ConstantInt::get(IntegerType::getInt64Ty(M.getContext()),
+					0/*value*/, true));
+
+	Constant *memoryAccessLimit = ConstantInt::get(
+			IntegerType::getInt64Ty(M.getContext()), 4294967296/*value*/, true);
+
 
 	//Overhead for file name argument "result.txt"
 	// Defining and initializing global variables corresponding to message strings
@@ -140,6 +151,11 @@ PreservedAnalyses MemoryTracerPass::run(Module &M, ModuleAnalysisManager &MAM) {
 	FunctionCallee CalleeF_fclose = M.getOrInsertFunction("fclose",
 			FunctionType::get(IntegerType::getInt32Ty(M.getContext()),
 					IO_FILE_PTR_ty, false /* this is var arg func type*/));
+
+	FunctionCallee CalleeF_exit = M.getOrInsertFunction("exit",
+			FunctionType::get(IntegerType::getVoidTy(M.getContext()),
+					IntegerType::getInt32Ty(M.getContext()),
+					false /* this is var arg func type*/));
 
 	auto &FAM =
 			MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
@@ -263,9 +279,34 @@ PreservedAnalyses MemoryTracerPass::run(Module &M, ModuleAnalysisManager &MAM) {
 		}
 
 		for (auto I : gepInstructions) {
+			Instruction *insertionPoint = I->getNextNode();
+			builder->SetInsertPoint(insertionPoint);
 
-			builder->SetInsertPoint(I->getNextNode());
+			// Increment the counter
+			Value *load = builder->CreateLoad(Type::getInt64Ty(M.getContext()),
+					memoryInstcounterVariable);
 
+			Value *CompareMemoryAccesses = builder->CreateICmpULT(load,
+					memoryAccessLimit);
+			BasicBlock *IfCompareMemoryAccesses = SplitBlock(I->getParent(),
+					insertionPoint);
+			BasicBlock *IfNotCompareMemoryAccesses = SplitBlock(
+					IfCompareMemoryAccesses, insertionPoint);
+			BasicBlock *RestCompareMemoryAccesses = SplitBlock(
+					IfNotCompareMemoryAccesses, insertionPoint);
+
+			builder->SetInsertPoint(
+					cast<Instruction>(CompareMemoryAccesses)->getParent()->getTerminator());
+			builder->CreateCondBr(CompareMemoryAccesses,
+					IfCompareMemoryAccesses, IfNotCompareMemoryAccesses);
+			cast<Instruction>(CompareMemoryAccesses)->getParent()->getTerminator()->eraseFromParent();
+
+			builder->SetInsertPoint(IfCompareMemoryAccesses->getTerminator());
+
+			Value *inc = builder->CreateAdd(load,
+					ConstantInt::get(Type::getInt64Ty(M.getContext()), 1));
+			builder->CreateStore(inc, memoryInstcounterVariable);
+			// Trace the address
 			Value *address = I;
 
 			Value *stdErrorVarPtr = builder->CreateGEP(IO_FILE_PTR_ty,
@@ -293,6 +334,23 @@ PreservedAnalyses MemoryTracerPass::run(Module &M, ModuleAnalysisManager &MAM) {
 //						{ builder->getInt8PtrTy(), }, printArgs, *builder, &TLI, /*IsVaArgs=*/
 //						true);
 
+			builder->CreateBr(RestCompareMemoryAccesses);
+			IfCompareMemoryAccesses->getTerminator()->eraseFromParent();
+
+			builder->SetInsertPoint(
+					IfNotCompareMemoryAccesses->getTerminator());
+
+			Value *instLoad = builder->CreateLoad(
+					Type::getInt64Ty(M.getContext()), counterVariable);
+			SmallVector<Value*, 8> printArgs { charPtr };
+			ArrayRef<Value*> VariadicArgs = { instLoad };
+			llvm::append_range(printArgs, VariadicArgs);
+			emitLibCall(LibFunc_printf, builder->getInt32Ty(),
+					{ builder->getInt8PtrTy(), }, printArgs, *builder, &TLI, /*IsVaArgs=*/
+					true);
+
+			builder->CreateCall(CalleeF_exit,
+					{ ConstantInt::get(Type::getInt32Ty(M.getContext()), 1) });
 		}
 
 //			for (auto I : loadInstructions) {
