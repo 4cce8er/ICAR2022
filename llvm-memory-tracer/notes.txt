@@ -1,6 +1,10 @@
 # compile into llvm IR
 ../../../../software/llvm-project/build/bin/clang++ -O2 -emit-llvm -S icar.cc -c -o icar.ll
 
+# Overly complicated sphinx compilation:
+/Users/mehye120/DATA/PhD/software/llvm-project/build/bin/clang -O2 -std=c99 -I. -Ilibutil  *.c -emit-llvm -S
+Also I chaged the #ifndef SPEC part in live.c file
+
 # Link multiple ll files if necessary
 /Users/mehye120/DATA/PhD/software/llvm-project/build/bin/llvm-link main.ll lbm.ll -o linked.ll
 

@@ -85,6 +85,8 @@ PreservedAnalyses MemoryTracerPass::run(Module &M, ModuleAnalysisManager &MAM) {
 	Constant *memoryAccessLimit = ConstantInt::get(
 			IntegerType::getInt64Ty(M.getContext()), 4294967296/*value*/, true);
 
+	Constant *skipInstrLimit = ConstantInt::get(
+			IntegerType::getInt64Ty(M.getContext()), 100000000/*value*/, true);
 
 	//Overhead for file name argument "result.txt"
 	// Defining and initializing global variables corresponding to message strings
@@ -143,34 +145,119 @@ PreservedAnalyses MemoryTracerPass::run(Module &M, ModuleAnalysisManager &MAM) {
 			ConstantInt::get(IntegerType::getInt64Ty(M.getContext()),
 					0/*value*/, true));
 
-	FunctionCallee CalleeF_fprintf = M.getOrInsertFunction("fprintf",
-			FunctionType::get(IntegerType::getInt32Ty(M.getContext()), {
-					IO_FILE_PTR_ty, builder->getInt8PtrTy() },
-					true /* this is var arg func type*/));
+//	FunctionCallee CalleeF_fprintf = M.getOrInsertFunction("fprintf",
+//			FunctionType::get(IntegerType::getInt32Ty(M.getContext()), {
+//					IO_FILE_PTR_ty, builder->getInt8PtrTy() },
+//					true /* this is var arg func type*/));
 
-	FunctionCallee CalleeF_fclose = M.getOrInsertFunction("fclose",
-			FunctionType::get(IntegerType::getInt32Ty(M.getContext()),
-					IO_FILE_PTR_ty, false /* this is var arg func type*/));
+//	FunctionCallee CalleeF_fclose = M.getOrInsertFunction("fclose",
+//			FunctionType::get(IntegerType::getInt32Ty(M.getContext()),
+//					IO_FILE_PTR_ty, false /* this is var arg func type*/));
 
 	FunctionCallee CalleeF_exit = M.getOrInsertFunction("exit",
 			FunctionType::get(IntegerType::getVoidTy(M.getContext()),
 					IntegerType::getInt32Ty(M.getContext()),
 					false /* this is var arg func type*/));
 
+	Function *F_memoryTrace = Function::Create(
+			FunctionType::get(IntegerType::getVoidTy(M.getContext()),
+					builder->getInt64Ty(),
+					false /* this is var arg func type*/),
+			Function::ExternalLinkage, "memory_trace", M);
+
 	auto &FAM =
 			MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
+	const TargetLibraryInfo &TLI = FAM.getResult<TargetLibraryAnalysis>(
+			*F_memoryTrace);
+	Type *SizeTTy = builder->getIntNTy(TLI.getSizeTSize(M));
+
+	FunctionCallee CalleeF_fwrite = M.getOrInsertFunction("fwrite",
+			FunctionType::get(SizeTTy,
+					{ PointerType::getInt64PtrTy(M.getContext()),
+							builder->getInt64Ty(), builder->getInt64Ty(),
+							IO_FILE_PTR_ty }, false /* this is var arg func type*/
+					));
+
+	BasicBlock *BB = BasicBlock::Create(M.getContext(), "entry", F_memoryTrace);
+	builder->SetInsertPoint(BB);
+	Instruction *insertionPoint = builder->CreateRetVoid();
+
+	builder->SetInsertPoint(insertionPoint);
+	// Increment the counter
+	Value *instLoad = builder->CreateLoad(Type::getInt64Ty(M.getContext()),
+			counterVariable);
+
+	Value *CompareInstructionCount = builder->CreateICmpUGT(instLoad,
+			skipInstrLimit);
+	BasicBlock *IfCompareInstructionCount = SplitBlock(BB, insertionPoint);
+
+	BasicBlock *IfCompareMemoryAccesses = SplitBlock(IfCompareInstructionCount,
+			insertionPoint);
+	BasicBlock *IfNotCompareMemoryAccesses = SplitBlock(IfCompareMemoryAccesses,
+			insertionPoint);
+
+	BasicBlock *IfNotCompareInstructionCount = SplitBlock(
+			IfNotCompareMemoryAccesses, insertionPoint);
+
+	Instruction *oldTerminator;
+	oldTerminator =
+			cast<Instruction>(CompareInstructionCount)->getParent()->getTerminator();
+	builder->SetInsertPoint(oldTerminator);
+	builder->CreateCondBr(CompareInstructionCount, IfCompareInstructionCount,
+			IfNotCompareInstructionCount);
+	oldTerminator->eraseFromParent();
+
+	oldTerminator = IfCompareInstructionCount->getTerminator();
+	builder->SetInsertPoint(oldTerminator);
+	Value *load = builder->CreateLoad(Type::getInt64Ty(M.getContext()),
+			memoryInstcounterVariable);
+	Value *inc = builder->CreateAdd(load,
+			ConstantInt::get(Type::getInt64Ty(M.getContext()), 1));
+	builder->CreateStore(inc, memoryInstcounterVariable);
+
+	Value *CompareMemoryAccesses = builder->CreateICmpULT(load,
+			memoryAccessLimit);
+
+	builder->CreateCondBr(CompareMemoryAccesses, IfCompareMemoryAccesses,
+			IfNotCompareMemoryAccesses);
+	oldTerminator->eraseFromParent();
+
+	oldTerminator = IfCompareMemoryAccesses->getTerminator();
+	builder->SetInsertPoint(oldTerminator);
+
+	// Trace the address
+	Value *address = F_memoryTrace->getArg(0);
+
+	Value *stdErrorVarPtr = builder->CreateGEP(IO_FILE_PTR_ty, stdErrorVar,
+			indexList);
+	Value *stdErrorVarActualPtr = builder->CreateLoad(IO_FILE_PTR_ty,
+			stdErrorVarPtr);
+
+	builder->CreateStore(address, arrayVariableForFWrite);
+
+	SmallVector<Value*, 8> Args { arrayVariableForFWrite, ConstantInt::get(
+			IntegerType::getInt64Ty(M.getContext()), 8/*value*/, true),
+			ConstantInt::get(IntegerType::getInt64Ty(M.getContext()),
+					1/*value*/, true), stdErrorVarActualPtr };
+
+	builder->CreateCall(CalleeF_fwrite, Args);
+
+	builder->CreateBr(IfNotCompareInstructionCount);
+	oldTerminator->eraseFromParent();
+
+	builder->SetInsertPoint(IfNotCompareMemoryAccesses->getTerminator());
+
+	SmallVector<Value*, 8> printArgs { charPtr };
+	ArrayRef<Value*> VariadicArgs = { instLoad };
+	llvm::append_range(printArgs, VariadicArgs);
+	emitLibCall(LibFunc_printf, builder->getInt32Ty(),
+			{ builder->getInt8PtrTy(), }, printArgs, *builder, &TLI, /*IsVaArgs=*/
+			true);
+
+	builder->CreateCall(CalleeF_exit,
+			{ ConstantInt::get(Type::getInt32Ty(M.getContext()), 1) });
 
 	for (Function &F : M) {
-
-		const TargetLibraryInfo &TLI = FAM.getResult<TargetLibraryAnalysis>(F);
-		Type *SizeTTy = builder->getIntNTy(TLI.getSizeTSize(M));
-
-		FunctionCallee CalleeF_fwrite = M.getOrInsertFunction("fwrite",
-				FunctionType::get(SizeTTy,
-						{ PointerType::getInt64PtrTy(M.getContext()),
-								builder->getInt64Ty(), builder->getInt64Ty(),
-								IO_FILE_PTR_ty }, false /* this is var arg func type*/
-						));
 
 		// We know we've encountered a main module∫
 		// we get the entry block of it
@@ -213,6 +300,11 @@ PreservedAnalyses MemoryTracerPass::run(Module &M, ModuleAnalysisManager &MAM) {
 //
 		}
 
+		if (F.getName() == "memory_trace") {
+			// Ignore this one
+			continue;
+		}
+
 		for (BasicBlock &B : F) {
 			// Handling the constant expressions, e.g. expressions as arguments to functions etc.
 			// Because some getElementPtr instrcutions are inside them
@@ -248,10 +340,6 @@ PreservedAnalyses MemoryTracerPass::run(Module &M, ModuleAnalysisManager &MAM) {
 //			std::vector<StoreInst*> storeInstructions;
 		for (BasicBlock &B : F) {
 			for (Instruction &I : B) {
-
-				LoadInst *load = nullptr;
-				StoreInst *store = nullptr;
-
 				GetElementPtrInst *getInstr = nullptr;
 
 				if ((getInstr = dyn_cast<GetElementPtrInst>(&I)) != nullptr) {
@@ -282,75 +370,106 @@ PreservedAnalyses MemoryTracerPass::run(Module &M, ModuleAnalysisManager &MAM) {
 			Instruction *insertionPoint = I->getNextNode();
 			builder->SetInsertPoint(insertionPoint);
 
-			// Increment the counter
-			Value *load = builder->CreateLoad(Type::getInt64Ty(M.getContext()),
-					memoryInstcounterVariable);
+			if (CastInst::castIsValid(Instruction::BitCast, I->getType(),
+					PointerType::getInt64PtrTy(M.getContext()))) {
+				Value *bitCasted = builder->CreateBitCast(I,
+						PointerType::getInt64PtrTy(M.getContext()));
+				Value *addressAsInt = builder->CreatePtrToInt(bitCasted,
+						builder->getInt64Ty());
 
-			Value *CompareMemoryAccesses = builder->CreateICmpULT(load,
-					memoryAccessLimit);
-			BasicBlock *IfCompareMemoryAccesses = SplitBlock(I->getParent(),
-					insertionPoint);
-			BasicBlock *IfNotCompareMemoryAccesses = SplitBlock(
-					IfCompareMemoryAccesses, insertionPoint);
-			BasicBlock *RestCompareMemoryAccesses = SplitBlock(
-					IfNotCompareMemoryAccesses, insertionPoint);
+				SmallVector<Value*, 8> Args { addressAsInt };
 
-			builder->SetInsertPoint(
-					cast<Instruction>(CompareMemoryAccesses)->getParent()->getTerminator());
-			builder->CreateCondBr(CompareMemoryAccesses,
-					IfCompareMemoryAccesses, IfNotCompareMemoryAccesses);
-			cast<Instruction>(CompareMemoryAccesses)->getParent()->getTerminator()->eraseFromParent();
+				builder->CreateCall(F_memoryTrace, Args);
+			}
 
-			builder->SetInsertPoint(IfCompareMemoryAccesses->getTerminator());
-
-			Value *inc = builder->CreateAdd(load,
-					ConstantInt::get(Type::getInt64Ty(M.getContext()), 1));
-			builder->CreateStore(inc, memoryInstcounterVariable);
-			// Trace the address
-			Value *address = I;
-
-			Value *stdErrorVarPtr = builder->CreateGEP(IO_FILE_PTR_ty,
-					stdErrorVar, indexList);
-			Value *stdErrorVarActualPtr = builder->CreateLoad(IO_FILE_PTR_ty,
-					stdErrorVarPtr);
-
-			Value *bitCasted = builder->CreatePtrToInt(address,
-					builder->getInt64Ty());
-
-			builder->CreateStore(bitCasted, arrayVariableForFWrite);
-
-			SmallVector<Value*, 8> Args { arrayVariableForFWrite,
-					ConstantInt::get(IntegerType::getInt64Ty(M.getContext()),
-							8/*value*/, true), ConstantInt::get(
-							IntegerType::getInt64Ty(M.getContext()), 1/*value*/,
-							true), stdErrorVarActualPtr };
-
-			builder->CreateCall(CalleeF_fwrite, Args);
-
-//				SmallVector<Value*, 8> printArgs { charPtr };
-//				ArrayRef<Value*> VariadicArgs = { address };
-//				llvm::append_range(printArgs, VariadicArgs);
-//				emitLibCall(LibFunc_printf, builder->getInt32Ty(),
-//						{ builder->getInt8PtrTy(), }, printArgs, *builder, &TLI, /*IsVaArgs=*/
-//						true);
-
-			builder->CreateBr(RestCompareMemoryAccesses);
-			IfCompareMemoryAccesses->getTerminator()->eraseFromParent();
-
-			builder->SetInsertPoint(
-					IfNotCompareMemoryAccesses->getTerminator());
-
-			Value *instLoad = builder->CreateLoad(
-					Type::getInt64Ty(M.getContext()), counterVariable);
-			SmallVector<Value*, 8> printArgs { charPtr };
-			ArrayRef<Value*> VariadicArgs = { instLoad };
-			llvm::append_range(printArgs, VariadicArgs);
-			emitLibCall(LibFunc_printf, builder->getInt32Ty(),
-					{ builder->getInt8PtrTy(), }, printArgs, *builder, &TLI, /*IsVaArgs=*/
-					true);
-
-			builder->CreateCall(CalleeF_exit,
-					{ ConstantInt::get(Type::getInt32Ty(M.getContext()), 1) });
+//			builder->SetInsertPoint(insertionPoint);
+//
+//			// Increment the counter
+//			Value *instLoad = builder->CreateLoad(
+//					Type::getInt64Ty(M.getContext()), counterVariable);
+//
+//			Value *CompareInstructionCount = builder->CreateICmpUGT(instLoad,
+//					skipInstrLimit);
+//			BasicBlock *IfCompareInstructionCount = SplitBlock(I->getParent(),
+//					insertionPoint);
+//
+//			BasicBlock *IfCompareMemoryAccesses = SplitBlock(
+//					IfCompareInstructionCount, insertionPoint);
+//			BasicBlock *IfNotCompareMemoryAccesses = SplitBlock(
+//					IfCompareMemoryAccesses, insertionPoint);
+//
+//			BasicBlock *IfNotCompareInstructionCount = SplitBlock(
+//					IfNotCompareMemoryAccesses, insertionPoint);
+//
+//			Instruction *oldTerminator;
+//			oldTerminator =
+//					cast<Instruction>(CompareInstructionCount)->getParent()->getTerminator();
+//			builder->SetInsertPoint(oldTerminator);
+//			builder->CreateCondBr(CompareInstructionCount,
+//					IfCompareInstructionCount, IfNotCompareInstructionCount);
+//			oldTerminator->eraseFromParent();
+//
+//			oldTerminator = IfCompareInstructionCount->getTerminator();
+//			builder->SetInsertPoint(oldTerminator);
+//			Value *load = builder->CreateLoad(Type::getInt64Ty(M.getContext()),
+//					memoryInstcounterVariable);
+//			Value *inc = builder->CreateAdd(load,
+//					ConstantInt::get(Type::getInt64Ty(M.getContext()), 1));
+//			builder->CreateStore(inc, memoryInstcounterVariable);
+//
+//			Value *CompareMemoryAccesses = builder->CreateICmpULT(load,
+//					memoryAccessLimit);
+//
+//			builder->CreateCondBr(CompareMemoryAccesses,
+//					IfCompareMemoryAccesses, IfNotCompareMemoryAccesses);
+//			oldTerminator->eraseFromParent();
+//
+//			oldTerminator = IfCompareMemoryAccesses->getTerminator();
+//			builder->SetInsertPoint(oldTerminator);
+//
+//			// Trace the address
+//			Value *address = I;
+//
+//			Value *stdErrorVarPtr = builder->CreateGEP(IO_FILE_PTR_ty,
+//					stdErrorVar, indexList);
+//			Value *stdErrorVarActualPtr = builder->CreateLoad(IO_FILE_PTR_ty,
+//					stdErrorVarPtr);
+//
+//			Value *bitCasted = builder->CreatePtrToInt(address,
+//					builder->getInt64Ty());
+//
+//			builder->CreateStore(bitCasted, arrayVariableForFWrite);
+//
+//			SmallVector<Value*, 8> Args { arrayVariableForFWrite,
+//					ConstantInt::get(IntegerType::getInt64Ty(M.getContext()),
+//							8/*value*/, true), ConstantInt::get(
+//							IntegerType::getInt64Ty(M.getContext()), 1/*value*/,
+//							true), stdErrorVarActualPtr };
+//
+//			builder->CreateCall(CalleeF_fwrite, Args);
+//
+////				SmallVector<Value*, 8> printArgs { charPtr };
+////				ArrayRef<Value*> VariadicArgs = { address };
+////				llvm::append_range(printArgs, VariadicArgs);
+////				emitLibCall(LibFunc_printf, builder->getInt32Ty(),
+////						{ builder->getInt8PtrTy(), }, printArgs, *builder, &TLI, /*IsVaArgs=*/
+////						true);
+////
+//			builder->CreateBr(IfNotCompareInstructionCount);
+//			oldTerminator->eraseFromParent();
+//
+//			builder->SetInsertPoint(
+//					IfNotCompareMemoryAccesses->getTerminator());
+//
+//			SmallVector<Value*, 8> printArgs { charPtr };
+//			ArrayRef<Value*> VariadicArgs = { instLoad };
+//			llvm::append_range(printArgs, VariadicArgs);
+//			emitLibCall(LibFunc_printf, builder->getInt32Ty(),
+//					{ builder->getInt8PtrTy(), }, printArgs, *builder, &TLI, /*IsVaArgs=*/
+//					true);
+//
+//			builder->CreateCall(CalleeF_exit,
+//					{ ConstantInt::get(Type::getInt32Ty(M.getContext()), 1) });
 		}
 
 //			for (auto I : loadInstructions) {
